@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Start the heap arena at 20 MB (`[game] heap_base = 0x01400000`) and
+  re-pin the kit with per-game heap configuration. The loader now accepts
+  the image ending at `0x0126d000`; headless presents seven uniform frames
+  (one captured) before the watchdog stops it. The menu remains unverified.
 - Re-pin the kit with `tools/build.py --regenerate --allow-table-gaps
   "<reason>"` support, forwarding the waiver and its reason to the translator.
   Builds without the flag keep the existing jump-table gap checks.

@@ -19,6 +19,9 @@ bundle_id = "dev.recompkit.pharaoh"
 executable = "Pharaoh.exe"
 sha256 = "b21b7d719491bb45dfb324ba95231a5b0960ab25fea1bf3fb21da65da7eca662"
 image_base = 0x00400000
+# The image ends at 0x0126d000 (13.6 MB of static .data), above the kit's
+# default heap start of 0x01000000; the arena starts at 20 MB instead.
+heap_base = 0x01400000
 entry_point = 0x00562fea
 guest_root = 'C:\GOG Games\Pharaoh Gold'
 # Where a developer checkout finds the game, relative to the repository root.

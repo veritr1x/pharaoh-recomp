@@ -249,6 +249,82 @@ Kit remained on `pharaoh` at `969f027`; both checkouts were clean.
   headless frame directory. No smoke execution, native or portable test
   suites, regeneration or kit changes were performed during the resume.
 
+Task 1.5 continued on game main `2cfd174` and kit branch `pharaoh` at
+`969f027`, with both checkouts initially clean. The kit now takes the heap
+start from optional `[game] heap_base` through the generated header and
+CMake fragment into `GUEST_HEAP_BASE`. Its default remains `0x01000000`;
+this game's setting is `0x01400000`, above the image end `0x0126d000`.
+The loader's rejection diagnostic names both limits and the setting to
+raise. The mod heap and higher regions are unchanged.
+
+- Added the two kit config tests first and ran
+  `.venv/bin/python tools/test.py 2>&1 | tail -3`: **2 failed, 86 passed,
+  3 skipped**, test runner exit **1**. The failures were exactly
+  `KeyError: 'heap_base'` and missing `validate_heap_base`.
+  After implementation, `.venv/bin/python tools/test.py 2>&1 | tail -2`
+  reported **88 passed, 3 skipped**, exit **0**. Both runs also used
+  `tee` to retain full output under ignored `build/task-1.5-kit-*.log`;
+  `tee` and `tail` each exited **0**.
+- `.venv/bin/python kit/tools/format.py --write` exited **0**, formatting
+  235 handwritten source files with no unrelated tracked changes. The
+  game's `.venv/bin/python -m pytest -q tests` reported **4 passed**,
+  exit **0**, including the 20 MB setting and its rendered macro.
+- Rebuilt all three hosts in order, without regeneration:
+
+  ```sh
+  .venv/bin/python tools/build.py --jobs 8 2>&1 | tail -2
+  .venv/bin/python tools/build.py --target headless --jobs 8 2>&1 | tail -2
+  .venv/bin/python tools/build.py --target smoke --jobs 8 2>&1 | tail -2
+  ```
+
+  Each build exited **0**; each added `tee` and each `tail` exited **0**.
+  Full output is in ignored `build/task-1.5-app.log`,
+  `build/task-1.5-headless-build.log` and `build/task-1.5-smoke-build.log`.
+  The app build recompiled all 32 generated C files; the following builds
+  reused that archive and rebuilt their host objects. Compiler warning
+  diagnostics numbered **53 / 0 / 20**, respectively, with **0** compiler
+  error diagnostics. All three host binaries exist. A read-only Python
+  check found the `0x01400000u` heap definition in all **561** generated
+  compile commands; both generated config files also contain that value.
+- Ran the prescribed boot command:
+
+  ```sh
+  RECOMP_MAX_SECONDS=10 RECOMP_HOST_DUMP_DIR=build/frames \
+    build/recomp/pop_headless > build/headless-2.log 2>&1
+  ```
+
+  **The loader accepted the image:** the log names entry `00562fea` and
+  image `00400000..0126d000`. The host exited **4** after **40.0 seconds**:
+  `the guest stopped calling into the runtime; stopped by the host watchdog`.
+  The headless watchdog adds a 30-second grace to the 10-second cap.
+  There was no normal guest exit or reported fault. The log also reports
+  a mod-loader failure and that the watchdog stopped before mod teardown;
+  neither was investigated in this task.
+- **7 frames presented, 1 written**, all uniform, at **640x480 16bpp**,
+  through DirectDraw with no Direct3D draws. The capture is
+  `build/recomp/frames/frame_0000.ppm` (921,615 bytes), with one distinct
+  colour and zero non-background pixels. No menu or gameplay is established.
+  Headless uses `recomp_env("FRAMES")`, defaulting to `build/recomp/frames`;
+  the prescribed `HOST_DUMP_DIR` is read by `host/present_pixels.cpp` and
+  did not redirect this capture. `build/frames` remains absent. Both frame
+  directories had zero captures before the run.
+- First missing imports reached, in log order: **`USER32.dll!FindWindowA`**,
+  `GDI32.dll!GetDeviceCaps`, `GDI32.dll!GetTextExtentPointA`,
+  `GDI32.dll!SetBkColor`. Each returned zero and logged an unknown stdcall
+  argument count, with possible stack drift. No Miles import is recorded
+  as reached. This run does not establish the cause of the stall.
+- `grep -c "frame_" build/headless-2.log` printed **1**, exit **0**.
+  The prescribed `grep -iE "trampoline|no shim|missing|fault|abort|unknown"`
+  pipeline returned four distinct unknown-arity warnings, each once;
+  all five pipeline stages exited **0**. Read and retained the final
+  15 log lines for the task report. `build/recomp/run-report.json` is absent.
+- Read-only build/artifact assertions, `tools/check_game_literals.py`,
+  both repositories' `git diff --check`, and `git check-ignore` for the
+  logs, captures and binaries all exited **0**. The staged kit passed
+  `.venv/bin/python kit/tools/check_repo.py` (source boundaries and local
+  documentation links), exit **0**. Native test suites, smoke execution
+  and other-platform builds were not run in Task 1.5.
+
 #### 2026-09-13: identify the missing function at 0x004ab2af
 
 The missing function at `0x004ab2af` is `0x004a98b0` (`ENTRY_4AB`),
