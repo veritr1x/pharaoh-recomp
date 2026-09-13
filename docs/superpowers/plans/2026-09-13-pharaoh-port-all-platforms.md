@@ -1175,6 +1175,107 @@ Kit pharaoh branch: Miles arity table, Bink/Smacker stubs, the kernel32,
 user32 and gdi32 shims the import table lacked."
 ```
 
+### Task 2.7: `BinkOpen` succeeds with a finished video, so cinematics skip instead of exiting
+
+**Why:** Task 2.6 found that the game treats a failed `BinkOpen` as fatal: its
+video routine at `0x00413580` (`analysis/decompiled/Pharaoh.exe/functions/00413580.asm`)
+calls `BinkOpen(name, 0)` at `0x00413633`, and on 0 prints "Unable to load
+BINK!" and returns false, after which the game calls `ExitProcess`. Its
+playback loop at `0x00413690` reads only four fields of the returned record:
+`+0x00` width and `+0x04` height (to centre the video), and `+0x10` and
+`+0x14`, compared unsigned at `0x0041373c` (`CMP [EAX+0x14],[EAX+0x10]; JNC end`)
+as the current frame against the frame count. A zeroed record with the two
+counters equal ends the loop before any frame is decoded: the cinematic is
+skipped and the game continues. This is the kit design's "cinematics skip"
+(spec 4.4) done as a shim rather than a generated stub.
+
+**Files:**
+- Modify: `kit/dx/bink.cpp` (from Task 2.2)
+- Test: `kit/dx/tests/dx_tests.cpp` (`test_bink_smack_stubs`)
+- Modify: `docs/analysis.md`, `CHANGELOG.md`, `README.md`
+
+**Interfaces:**
+- Produces: `_BinkOpen@8` returns a guest heap block of 0x100 zero bytes with `+0x00 = 640`, `+0x04 = 480` (width and height, so a centring game computes a sane offset), every other field 0 (frame count and current frame both 0). `_BinkClose@4` frees it; `_BinkDoFrame@4`, `_BinkNextFrame@4`, `_BinkService@4`, `_BinkCopyToBuffer@28` return 0 and touch nothing; `_BinkWait@4` returns 0 (nothing to wait for). `_BinkGetError@0` still returns "no video decoder". `SmackOpen` stays 0 (no Smacker file ships; if a game path needs it, mirror this later).
+
+- [ ] **Step 1: Update the failing test**
+
+In `test_bink_smack_stubs` replace the `_BinkOpen@8 == 0` check with:
+
+```cpp
+    uint32_t bink = call_shim(tramp("binkw32.dll", "_BinkOpen@8"), {put_str("intro.bik"), 0});
+    CHECK(bink != 0);
+    CHECK_EQ(rd32(bink + 0x00), 640u);
+    CHECK_EQ(rd32(bink + 0x04), 480u);
+    CHECK_EQ(rd32(bink + 0x10), 0u);   // frame count: a finished video
+    CHECK_EQ(rd32(bink + 0x14), 0u);   // current frame
+    CHECK_EQ(rd32(bink + 0x08), 0u);
+    CHECK_EQ(call_shim(tramp("binkw32.dll", "_BinkWait@4"), {bink}), 0u);
+    CHECK_EQ(call_shim(tramp("binkw32.dll", "_BinkDoFrame@4"), {bink}), 0u);
+    call_shim(tramp("binkw32.dll", "_BinkNextFrame@4"), {bink});
+    CHECK_EQ(rd32(bink + 0x14), 0u);   // still finished
+    call_shim(tramp("binkw32.dll", "_BinkClose@4"), {bink});
+    CHECK(!heap_owns(bink));
+```
+
+(`put_str`/`heap_owns`: use the dx test file's own guest-string and heap helpers; grep them.)
+
+- [ ] **Step 2: Run to verify failure** (stub route, `-R dx_tests`): FAIL at `bink != 0`.
+
+- [ ] **Step 3: Implement** in `bink.cpp`:
+
+```cpp
+// A finished video: a game that loops "while current frame < frame count"
+// leaves at once and continues past the cinematic it could not decode.
+const uint32_t BINK_RECORD_BYTES = 0x100;
+
+void BinkOpen(X86 *c) {
+    uint32_t rec = heap_alloc(BINK_RECORD_BYTES, true, 16);
+    if (!rec) {
+        set_eax(c, 0);
+        return;
+    }
+    memset(g_mem + rec, 0, BINK_RECORD_BYTES);
+    wr32(rec + 0x00, 640); // width
+    wr32(rec + 0x04, 480); // height
+    LOGV("bink: open \"%s\" -> finished video record %08x (no decoder)", gm_str(arg(c, 0)).c_str(), rec);
+    set_eax(c, rec);
+}
+
+void BinkClose(X86 *c) {
+    if (arg(c, 0))
+        heap_free(arg(c, 0));
+    set_eax(c, 0);
+}
+```
+
+and point the table's `Open` and `Close` entries at them.
+
+- [ ] **Step 4: Test, then the smoke run**
+
+```bash
+.venv/bin/python kit/tools/format.py --write
+.venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests --output-on-failure | tail -3
+.venv/bin/python tools/build.py --target smoke --jobs 8 2>&1 | tail -2
+RECOMP_SCRIPT=$PWD/smoke/main-menu.script RECOMP_HOST_DUMP_DIR=build/smoke \
+RECOMP_DDRAW_MODES=640x480x16,800x600x16,1024x768x16 RECOMP_SMOKE_DRAWABLE=1024x768 \
+RECOMP_MAX_SECONDS=30 build/recomp/pop_smoke > build/smoke-2.log 2>&1; echo "exit $?"
+.venv/bin/python kit/tools/recomp/ppm_to_png.py build/smoke/smoke_main-menu_present.ppm build/smoke/main-menu.png
+```
+
+Expected: `dx_tests` passes; the smoke log no longer shows "Unable to load BINK!" and the dump is not uniform (a title or menu). Record the run (what the log says after the video, the mode, whether frames have content) in `docs/analysis.md`; update README's status line.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd kit && git add dx/bink.cpp dx/tests/dx_tests.cpp CHANGELOG.md && git commit -F - <<'EOF'
+bink: BinkOpen returns a finished video so a game skips its cinematics
+
+A game that exits when BinkOpen fails now gets a record whose frame count
+and current frame are both zero; its playback loop ends before decoding.
+EOF
+cd .. && git add kit docs/analysis.md README.md CHANGELOG.md smoke && git commit -m "Cinematics skip; smoke run past the intro"
+```
+
 ---
 
 ## Phase 3: sound through Miles
