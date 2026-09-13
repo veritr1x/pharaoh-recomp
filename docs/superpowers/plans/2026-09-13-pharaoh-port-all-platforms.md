@@ -459,6 +459,134 @@ Append to the run log in `docs/analysis.md`: the exit reason, the first missing 
 git add docs/analysis.md && git commit -m "analysis: first headless boot"
 ```
 
+### Task 1.5: A per-game heap arena start (`[game] heap_base`)
+
+**Why:** the headless host stops in the loader with "image does not fit below
+the heap arena". This image ends at `0x0126d000` (SizeOfImage `0xe6d000`,
+13.6 MB of it static `.data`); the kit's heap arena starts at
+`GUEST_HEAP_BASE = 0x01000000`, a constant in `runtime/x86.h` sized for
+smaller games. The image base already flows from `game.toml` through
+`generated/game_config.cmake` into `add_compile_definitions(GUEST_IMAGE_BASE=...)`
+(`kit/CMakeLists.txt:78`); the heap start follows the same path.
+
+**Files:**
+- Modify: `kit/tools/game_config.py` (optional `heap_base`, default `0x01000000`, validated page-aligned and below `0x0e000000`)
+- Modify: `kit/tools/gen_game_config.py` (`RECOMP_HEAP_BASE` in the header and `set(RECOMP_HEAP_BASE ...)` in the cmake fragment)
+- Modify: `kit/CMakeLists.txt:78` (`add_compile_definitions(GUEST_HEAP_BASE=${RECOMP_HEAP_BASE})`)
+- Modify: `kit/runtime/x86.h:46-50` (`#ifndef GUEST_HEAP_BASE` guard and the layout comment)
+- Modify: `kit/runtime/loader.cpp:355-358` (the error names both numbers)
+- Test: the kit's config tests (find them with `grep -rln "render_header\|gen_game_config" kit/tests kit/tools/tests`)
+- Modify: `game.toml` (`heap_base = 0x01400000`), `tests/test_game_config.py`, `CHANGELOG.md`, `docs/analysis.md`
+
+**Interfaces:**
+- Produces: `cfg["game"]["heap_base"]` (int, default `0x01000000`); macro `RECOMP_HEAP_BASE`; compile definition `GUEST_HEAP_BASE`; `runtime/guest.h`'s `HEAP_BASE` follows it unchanged. `MOD_HEAP_BASE` (`0x0e000000`) and everything above are untouched.
+
+- [ ] **Step 1: Write the failing kit tests**
+
+In the kit's existing config/gen test file add:
+
+```python
+    def test_heap_base_defaults_to_the_kit_layout(self):
+        cfg = game_config.load(ROOT / "games/stub")
+        self.assertEqual(cfg["game"]["heap_base"], 0x01000000)
+        self.assertIn("#define RECOMP_HEAP_BASE 0x01000000u", gen_game_config.render_header(cfg))
+        self.assertIn("set(RECOMP_HEAP_BASE 0x01000000u)", gen_game_config.render_cmake(cfg))
+
+    def test_heap_base_is_validated(self):
+        cfg = game_config.load(ROOT / "games/stub")
+        for bad in (0x01000010, 0x0e000000, 0x00400000):
+            with self.assertRaises(ValueError):
+                game_config.validate_heap_base(bad)
+        self.assertEqual(game_config.validate_heap_base(0x01400000), 0x01400000)
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+```bash
+.venv/bin/python tools/test.py 2>&1 | tail -3
+```
+
+Expected: FAIL (`KeyError: 'heap_base'`, then `AttributeError: validate_heap_base`).
+
+- [ ] **Step 3: Implement**
+
+`game_config.py`:
+
+```python
+HEAP_BASE_DEFAULT = 0x01000000
+HEAP_END = 0x0e000000        # runtime/x86.h GUEST_HEAP_END; the mods' heap starts there
+
+
+def validate_heap_base(value):
+    """The heap arena start: page aligned, above the image base, below the arena end."""
+    if value % 0x1000 or not (0x00400000 < value < HEAP_END):
+        raise ValueError("[game] heap_base %#x must be page aligned and between 0x00400000 and %#x" % (value, HEAP_END))
+    return value
+```
+
+and in `load()` after the missing-keys check: `game["heap_base"] = validate_heap_base(int(game.get("heap_base", HEAP_BASE_DEFAULT)))`.
+
+`gen_game_config.py`: add `("heap_base", "RECOMP_HEAP_BASE")` to `ADDRESSES` and `lines.append("set(RECOMP_HEAP_BASE %s)" % c_hex(game["heap_base"]))` to `render_cmake`.
+
+`kit/CMakeLists.txt` after line 78: `add_compile_definitions(GUEST_HEAP_BASE=${RECOMP_HEAP_BASE})`.
+
+`runtime/x86.h`: wrap `#define GUEST_HEAP_BASE 0x01000000u` in `#ifndef GUEST_HEAP_BASE ... #endif` with the comment "The build passes the game's heap start ([game] heap_base); the default serves the test harness and games whose image ends below 16 MB." and change the layout comment line to `*   GUEST_HEAP_BASE..0x0e000000  heap arena (default 0x01000000)`.
+
+`runtime/loader.cpp`: make the message `"image ends at %08x, above the heap arena start %08x; raise [game] heap_base"` with `snprintf` like the image-base error above it.
+
+- [ ] **Step 4: Run the kit tests, then the game config**
+
+```bash
+.venv/bin/python tools/test.py 2>&1 | tail -2
+```
+
+Expected: PASS (two more than before). Then in `game.toml` `[game]` add:
+
+```toml
+# The image ends at 0x0126d000 (13.6 MB of static .data), above the kit's
+# default heap start of 0x01000000; the arena starts at 20 MB instead.
+heap_base = 0x01400000
+```
+
+and in `tests/test_game_config.py` `test_identity`:
+
+```python
+        self.assertEqual(self.cfg["game"]["heap_base"], 0x01400000)
+        self.assertGreater(self.cfg["game"]["heap_base"], 0x0126D000)  # SizeOfImage end
+        self.assertIn("#define RECOMP_HEAP_BASE 0x01400000u", self.header)
+```
+
+```bash
+.venv/bin/python -m pytest -q tests
+```
+
+Expected: `4 passed`.
+
+- [ ] **Step 5: Rebuild every host and boot headless**
+
+The compile definition changes every object: rebuild the app, headless and smoke targets (no `--regenerate`).
+
+```bash
+.venv/bin/python tools/build.py --jobs 8 2>&1 | tail -2
+.venv/bin/python tools/build.py --target headless --jobs 8 2>&1 | tail -2
+.venv/bin/python tools/build.py --target smoke --jobs 8 2>&1 | tail -2
+RECOMP_MAX_SECONDS=10 RECOMP_HOST_DUMP_DIR=build/frames build/recomp/pop_headless > build/headless-2.log 2>&1; echo "exit $?"
+grep -c "frame_" build/headless-2.log; grep -iE "trampoline|no shim|missing|fault|abort|unknown" build/headless-2.log | sort | uniq -c | sort -rn | head -30
+```
+
+Expected: the loader accepts the image; the game runs until it exits or faults. Record the exit reason, frames written, and the first missing imports in the `docs/analysis.md` run log (append to the Task 1.4 entry).
+
+- [ ] **Step 6: Commit kit and game**
+
+```bash
+cd kit && git add tools/game_config.py tools/gen_game_config.py CMakeLists.txt runtime/x86.h runtime/loader.cpp tests tools/tests CHANGELOG.md && git commit -m "A per-game heap arena start: [game] heap_base
+
+An image whose static data runs past 16 MB did not fit below the arena.
+The start now comes from game.toml through the generated config, like the
+image base; the default is unchanged."
+cd .. && git add kit game.toml tests/test_game_config.py CHANGELOG.md docs/analysis.md && git commit -m "Heap arena starts at 20 MB; the loader accepts the image"
+```
+
 ---
 
 ## Phase 2: the import gaps close; the game reaches its main menu in the smoke host
