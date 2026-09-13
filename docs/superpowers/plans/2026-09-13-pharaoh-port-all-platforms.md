@@ -1276,6 +1276,131 @@ EOF
 cd .. && git add kit docs/analysis.md README.md CHANGELOG.md smoke && git commit -m "Cinematics skip; smoke run past the intro"
 ```
 
+### Task 2.8: Guest writes through a retained Lock pointer reach the renderer
+
+**Why (measured in Task 2.7's follow-up):** with the cinematic skipped the
+game runs its main loop (`timeGetTime`, `GetCursorPos`, `SetCursor`,
+`PeekMessageA`, `IsLost`, and a `BltFast` about 20 times a second), yet
+every presented frame is black. Its display code (`FUN_004d0480`) locks the
+primary and its one system-memory offscreen surface once each at start-up,
+keeps the `lpSurface` pointers (it logs them as "Front Surface Ptr" and
+"Back Surface Ptr"), unlocks, and from then on renders straight into the
+offscreen surface's memory and calls `BltFast(0, 0, back, rect, 0)` onto the
+primary (`FUN_004d03f0`). A `peek` in the smoke host mid-run shows the back
+surface's guest memory (`0x0179be10`) full of RGB 565 pixels while the
+primary (`0x01705e10`) is all zero. The kit's `blit()` copies guest rows, so
+the primary was zeroed afterwards: the recorded blit is replayed on the GPU
+from the source's last uploaded revision, which is black because no
+Lock/Unlock ever advanced it, and the readback wins. `RECOMP_LEGACY_WRITEBACK=1`
+and `RECOMP_HOST_SURFACE_UPLOAD=cpu` do not change this.
+
+**Files:**
+- Modify: `kit/dx/ddraw.cpp` (`Surface_Lock` ~2722, `Surface_Unlock` ~2976, `Surface_Blt` ~2300, `Surface_BltFast` ~2380, the `ComObj` surface fields)
+- Modify: `kit/dx/ddraw.h` (declare the helper for tests)
+- Test: `kit/dx/tests/dx_tests.cpp` (`test_retained_pointer_writes`)
+- Modify: `kit/CHANGELOG.md`, `docs/analysis.md`, `README.md`, `CHANGELOG.md`
+
+**Interfaces:**
+- Produces: a surface field `retained_pointer` (bool), set by `Surface_Lock` when the lock is not `DDLOCK_READONLY`, never cleared (once a guest has held a writable pointer it may keep it). A helper
+  `void ddraw_refresh_retained_writes(ComObj *s, const int32_t rect[4])`: when `s->retained_pointer`, hashes the guest bytes of `rect` (FNV-1a 64 over each row's bytes; the whole rect, no sampling) and compares with `s->retained_hash`; on a change it stores the new hash and does exactly what `Surface_Unlock` does for a written lock (`ddraw_note_cpu_write_impl(s); surface_pixels_changed(s);`), so the renderer re-uploads from guest memory. `Surface_Blt` and `Surface_BltFast` call it on the source rect before `d3d_read_surface(src, ..., HOST_READ_BLT_SOURCE)`. The present path calls it on the primary's full rect before presenting, for a game that also draws straight into the primary (find where the presenter takes the primary's pixels: grep `presenter_write\|host_present` in `ddraw.cpp`/`present.cpp`; if that lives in the host, expose the helper through `host_api.h` and call it from the present step; say where you put it).
+- A surface never locked writable is untouched: the hash is not computed and the existing paths are unchanged, so the first game's performance profile stays as it is.
+
+- [ ] **Step 1: Write the failing test**
+
+Next to `test_blt_and_colorkey` (reuse its way of creating a DirectDraw object, setting a mode and creating a primary and an offscreen system-memory surface; grep `DDSCAPS_SYSTEMMEMORY` in the test file for one):
+
+```cpp
+// A game that keeps the pointer Lock handed it and draws through it between
+// frames: the renderer must see those bytes at the next blit.
+static void test_retained_pointer_writes() {
+    cpu_reset();
+    /* create dd, set 640x480x16, create primary `prim` and a 640x480 offscreen system-memory surface `back` as test_blt_and_colorkey does */
+    uint32_t desc = sc(0x200);
+    gm_zero(desc, 0x6c);
+    wr32(desc, 0x6c);
+    CHECK_EQ(call_method(back, DDS_Lock, {0, desc, DDLOCK_WAIT, 0}), DD_OK);
+    uint32_t pixels = rd32(desc + DDSD_OFF_lpSurface);
+    CHECK(pixels != 0);
+    CHECK_EQ(call_method(back, DDS_Unlock, {pixels}), DD_OK);
+    uint32_t rev_before = ddraw_surface_revision(com_id(back));
+    // Draw through the retained pointer, outside any Lock.
+    for (uint32_t y = 0; y < 480; ++y)
+        for (uint32_t x = 0; x < 640; ++x)
+            wr16(pixels + y * 1280 + x * 2, 0xe482);
+    uint32_t rect = sc(0x300);
+    wr32(rect, 0); wr32(rect + 4, 0); wr32(rect + 8, 640); wr32(rect + 12, 480);
+    CHECK_EQ(call_method(prim, DDS_BltFast, {0, 0, back, rect, 0}), DD_OK);
+    // The source's revision moved (the renderer will re-upload it) and the
+    // primary's guest memory carries the pixels.
+    CHECK(ddraw_surface_revision(com_id(back)) != rev_before);
+    uint32_t pdesc = sc(0x400);
+    gm_zero(pdesc, 0x6c);
+    wr32(pdesc, 0x6c);
+    CHECK_EQ(call_method(prim, DDS_Lock, {0, pdesc, DDLOCK_READONLY | DDLOCK_WAIT, 0}), DD_OK);
+    uint32_t ppix = rd32(pdesc + DDSD_OFF_lpSurface);
+    CHECK_EQ(rd16(ppix + 200 * 1280 + 300 * 2), 0xe482u);
+    call_method(prim, DDS_Unlock, {ppix});
+    // Unchanged bytes do not move the revision again.
+    uint32_t rev_after = ddraw_surface_revision(com_id(back));
+    CHECK_EQ(call_method(prim, DDS_BltFast, {0, 0, back, rect, 0}), DD_OK);
+    CHECK_EQ(ddraw_surface_revision(com_id(back)), rev_after);
+    // A surface never locked writable is not hashed: its revision is untouched by a blit.
+}
+```
+
+Use the test file's real names for the method indices and helpers (`DDS_Lock`, `DDS_BltFast`, `com_id`, `call_method`, `sc`, `gm_zero`); `ddraw_surface_revision` is declared in `ddraw.cpp` (line ~109), expose it in `ddraw.h` if the test cannot see it.
+
+- [ ] **Step 2: Run to verify failure** (stub route, `-R dx_tests`): FAIL at `revision != rev_before` or at the primary pixel check.
+
+- [ ] **Step 3: Implement** as the interface says. Keep the hash function local to `ddraw.cpp`:
+
+```cpp
+// FNV-1a over the rect's guest rows: the write notice a retained pointer
+// never gives. Whole rows, no sampling: a sampled hash misses a sprite.
+uint64_t hash_rect(const ComObj *s, const int32_t r[4]) {
+    uint64_t h = 1469598103934665603ull;
+    uint32_t bpp_bytes = bytes_per_pixel(s->bpp);
+    for (int32_t y = r[1]; y < r[3]; ++y) {
+        const uint8_t *row = gm_ptr(s->pixels + (uint32_t)y * s->pitch + (uint32_t)r[0] * bpp_bytes);
+        for (int32_t i = 0, n = (r[2] - r[0]) * (int32_t)bpp_bytes; i < n; ++i) {
+            h ^= row[i];
+            h *= 1099511628211ull;
+        }
+    }
+    return h;
+}
+```
+
+- [ ] **Step 4: Test, rebuild the smoke host, run the menu script**
+
+```bash
+.venv/bin/python kit/tools/format.py --write
+.venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests --output-on-failure | tail -3
+.venv/bin/python tools/build.py --target smoke --jobs 8 2>&1 | tail -2
+RECOMP_SCRIPT=$PWD/smoke/main-menu.script RECOMP_HOST_DUMP_DIR=build/smoke \
+RECOMP_DDRAW_MODES=640x480x16,800x600x16,1024x768x16 RECOMP_SMOKE_DRAWABLE=1024x768 \
+RECOMP_MAX_SECONDS=30 build/recomp/pop_smoke > build/smoke-8.log 2>&1; echo "exit $?"
+grep -E "non-black|presented frames" build/smoke-8.log
+.venv/bin/python kit/tools/recomp/ppm_to_png.py build/smoke/smoke_main-menu_present.ppm build/smoke/main-menu.png
+```
+
+Expected: `dx_tests` passes; `non-black` is well above 0 and the PNG shows the game's title or main menu. Record the run in `docs/analysis.md` (what the frame shows, `non-black` figures) and update README's status line.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd kit && git add dx/ddraw.cpp dx/ddraw.h dx/host_api.h dx/tests/dx_tests.cpp CHANGELOG.md host && git commit -F - <<'EOF'
+ddraw: writes through a retained Lock pointer reach the renderer
+
+A game that locks a surface once, keeps the pointer and draws through it
+between frames left the renderer with the revision its Unlock uploaded. A
+surface locked writable is now hashed over the rect before it is read as a
+blit source or presented; a change gives the write notice its Unlock never
+did.
+EOF
+cd .. && git add kit docs/analysis.md README.md CHANGELOG.md && git commit -m "The main menu draws in the smoke host"
+```
+
 ---
 
 ## Phase 3: sound through Miles
