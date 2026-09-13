@@ -46,10 +46,14 @@ entry_points = [0x004a98b0]
 
 [hooks]
 # Every address here is a sentinel until the listings say otherwise.
-# runtime/kernel32.cpp native_frame_clock: GetTickCount return addresses of
-# the draw loop's waits. This game imports both GetTickCount and timeGetTime
-# (plus QueryPerformanceCounter); which one paces the main loop is a question
-# for the listings.
+# runtime/kernel32.cpp native_frame_clock hooks GetTickCount return addresses.
+# The verified per-frame calls instead use timeGetTime (IAT 0x0056f22c):
+# returns 0x004d6b79 in FUN_004d6b60, 0x004ddcb8 in FUN_004ddcb0 and
+# 0x004d0046 in FUN_004d0040. FUN_004d0280 accumulates the last helper's
+# elapsed milliseconds and normally skips drawing until 50 ms have elapsed.
+# The outer loop polls this gate; these are not GetTickCount draw waits.
+# Keep all five sentinels. See docs/analysis.md, Task 4.2, for the listings
+# and the measured 20.10 new frames/s over a 20-second smoke interval.
 frame_clock_begin = 0x0126ce10
 frame_clock_wait = 0x0126ce14
 frame_clock_wait_clamp = 0x0126ce18

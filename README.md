@@ -52,8 +52,9 @@ two timed city captures show moving animals and an advancing date. The
 eight-round run record, every screen's capture path and the remaining
 limits are in [docs/analysis.md](docs/analysis.md). The game created profile
 autosaves; **saving through the menu and reloading remain unverified**.
-Housing construction, human walkers and the interactive macOS app are also
-unverified.
+Housing construction and human walkers remain unverified. The interactive
+macOS app displays the title screen, but its automated click did not advance
+it, and quitting ended with a host fault; see the Task 4.2 run record.
 
 The kit is pinned to landed main `2fe5c5d` and includes Miles shims (41
 imports), Bink and Smacker shims (19 imports), and the 15 missing user32,
@@ -108,6 +109,23 @@ and `smoke_city-30s_present.ppm`. The script ends after those captures and
 does not test menu saving or loading. The current smoke host ignores
 `RECOMP_MAX_SECONDS`; its own deadline is 180 seconds plus grace, and the
 verified script finished in 71.8 seconds.
+
+## Play on macOS
+
+After completing the build steps above, launch from this checkout with
+`open build/PharaohRecomp.app`, or double-click that app in Finder. For a
+manual check, click the title screen, choose **Play Pharaoh/Cleopatra**,
+then create a **new family** (choose **Create** if the Family Registry
+appears). Enter a name, choose **Begin Family History**, select
+**Predynastic Period** and its **Begin** arrow, then enter **Nubt** using
+the **To the city** arrow and dismiss the housing tutorial. Choose the
+housing tool and build a few houses, right-click a house for information,
+try edge scrolling and the arrow keys, then press Escape and try the
+in-game options and **Save/Load**. Keep your family/profile files in
+`build/recomp/profile`. These hand checks remain unverified: the automated
+app run reached only the title, and quitting faulted after guest exit 0.
+The captures, resolution, cursor limitations and pacing measurements are
+in [docs/analysis.md](docs/analysis.md).
 
 ## Play on an iPad
 

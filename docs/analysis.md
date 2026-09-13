@@ -113,8 +113,9 @@ so the kit's host-drawn pointer hook has no DirectDraw surface to point at.
   `.bik` files are the intro and six campaign cinematics.
 - **Time** is `timeGetTime` plus `GetTickCount`, `QueryPerformanceCounter`
   and `QueryPerformanceFrequency`; the kit's frame-clock hook identifies
-  draw-loop waits by `GetTickCount` return addresses, and whether this
-  game's limiter goes through it is a question for the listings.
+  draw-loop waits by `GetTickCount` return addresses. Task 4.2 verifies
+  that the main-loop draw gate instead uses `timeGetTime` and normally
+  admits a draw every 50 ms, so all five frame-clock hooks stay sentinels.
 - **Input** is user32: `GetCursorPos`, `GetAsyncKeyState`, `GetMessagePos`
   and window messages. No DirectInput, so the kit's `mouse_*` hooks (a
   DirectInput device object) will never be real for this game; the touch
@@ -151,6 +152,187 @@ write it.
 ### Run log
 
 Recorded runs of the pipeline against this executable, newest first.
+
+#### 2026-09-14: Task 4.2 automated macOS title capture and frame pacing
+
+Started on clean game `main` `88197ea` and clean kit `pharaoh`
+`2fe5c5dcd967286138820338dd1cb71975aa0314`, already pinned here. Followed
+the unattended adaptation: app launch, timed captures and one AppleScript
+click attempt, then a menu smoke timing measurement and listing analysis.
+**This is not five minutes of hand play or first-mission app verification.**
+No kit code, hook value, sentinel test or submodule pin changed.
+
+**Step 1 — app.** Read-only Python/pefile checks exited **0**: pinned
+SHA-256, image base and entry point match, and generated `x86.h` is identical
+to `kit/runtime/x86.h`. Ran:
+
+```sh
+.venv/bin/python tools/build.py --jobs 8 > build/task-4.2-app-build.log 2>&1
+```
+
+Exit **0**, app linked and signed, **6** existing C-linkage return-type
+warnings and **0** compiler errors. No regeneration was needed. Source
+inspection finds no `RECOMP_MAX_SECONDS` reader in the SDL app: its
+`BootOptions.deadline_seconds` is explicitly zero. The shared presenter
+reads `recomp_env("FRAME_TIMINGS")` as a **CSV filename**, not a boolean.
+Launched the rebuilt bundle executable directly with these environment
+values (absolute paths below are relative to this checkout's `$PWD`):
+
+```sh
+RECOMP_PROFILE_DIR="$PWD/build/recomp/profile/task-4.2-app.evp55p6k" \
+RECOMP_MAX_SECONDS=40 \
+RECOMP_FRAME_TIMINGS="$PWD/build/task-4.2-app-timings.csv" \
+RECOMP_HOST_AUDIO_CAPTURE="$PWD/build/task-4.2-app-audio.wav" \
+RECOMP_TRACE_POINTER=1 \
+build/PharaohRecomp.app/Contents/MacOS/PharaohRecomp > build/task-4.2-app.log 2>&1
+```
+
+The profile was created fresh with Python `tempfile.mkdtemp`; existing
+families were preserved. A Python subprocess supervisor waited 12 seconds,
+then ran `screencapture -x build/app-title.png`: exit **0**. `cliclick`
+is absent. AppleScript's window query returned position `(320,43)` and
+size `(1280,992)` points, including the title bar. Ran this click attempt:
+
+```applescript
+tell application "System Events"
+    tell process "PharaohRecomp"
+        set frontmost to true
+        click at {960, 555}
+    end tell
+end tell
+```
+
+`osascript` returned **0**, identifying the Pharaoh Gold window. Waited
+four seconds, then `screencapture -x build/app-after-click.png` exited
+**0**. Both PNGs are **3840x2160** desktop captures, visually inspected:
+Cleopatra portrait, gold title, pyramids and **Click to Start**, with the
+host timing overlay at upper right. The game artwork below the overlay is
+pixel-identical between captures. The title did **not** advance; the
+pointer trace contains **zero `[pointer-button]` events**, so AppleScript's
+success does not establish delivery of a game click or a cursor offset.
+
+`osascript -e 'quit app "PharaohRecomp"'` exited **0**. The app reported
+guest `ExitProcess(0)` at **38.6 s**, then logged **SIGSEGV**,
+`EIP=0056478f ESP=0effff40 EBP=0effffd8`; its process exited **5** after
+**39.963 s** wall time. The supervisor's fallback termination was unused.
+This is a shutdown fault, not a clean app exit or the 40-second switch
+taking effect. No repair was attempted in this measurement task.
+
+Observed resolution, pacing, sound and limitations:
+
+- Guest mode **640x480 16bpp**, window content **1280x960 points**, drawable
+  **2560x1920 pixels**. The full title is visible with no obvious colour
+  corruption. Resolution switching was not exercised.
+- **785 guest presents / 38.6 s = 20.34/s** including startup. Both captured
+  overlays report **20.0 new FPS**, **50.0 ms** frames and **58.3 ms** P95;
+  their displayed/repeated rates differ. One drawable acknowledgement
+  timeout used command-completion fallback; the final counters report
+  **4 drops, 1 fault**. The timing CSV has **2520 rows** versus **2544**
+  completions in the final counters. The presenter buffers CSV writes;
+  the 24 missing rows are consistent with the shutdown fault losing that
+  tail, so this is not a complete-run timing record.
+- The host warns that the sentinel DirectInput pointer has a vtable
+  mismatch and uses window position differences. Mouse motion is logged;
+  button delivery and cursor alignment remain unverified. No cursor hook
+  was changed from this observation.
+- The mixer capture is **38.058667 s**, stereo 48 kHz, 16-bit PCM, peak
+  **0.760315**. The host reports **38.0 s non-silent**, **0 discontinuities**,
+  **0** silent gaps longer than 50 ms with a voice playing, and **0 late / 0
+  starved** pulls in its audio-sink diagnostic. Miles streaming reaches
+  the app's mixer; subjective listening and click effects were not tested.
+  The separate missing-MIDI-SoundFont notice does not negate this PCM output.
+- The mod-loader failure, undrawn GDI `TextOutA` and unmodelled non-client
+  area diagnostics remain. Mission entry, building houses, right-click
+  panels, edge/arrow scrolling, options and menu Save/Load were not tested.
+
+**Step 2 — pacing.** Used the existing smoke binary with a fresh profile.
+To supply the requested literal `RECOMP_FRAME_TIMINGS=1` without writing
+into the repository root, ran from the fresh ignored directory
+`build/task-4.2-smoke.7sjcuty3`. In this command, `task_root` is the absolute
+game checkout path captured before changing directory:
+
+```sh
+RECOMP_PROFILE_DIR="$task_root/build/recomp/profile/task-4.2-smoke.gbbmeiio" \
+RECOMP_SCRIPT="$task_root/smoke/main-menu.script" \
+RECOMP_HOST_DUMP_DIR="$task_root/build/task-4.2-smoke.7sjcuty3/frames" \
+RECOMP_DDRAW_MODES=640x480x16 RECOMP_SMOKE_DRAWABLE=1024x768 \
+RECOMP_FRAME_TIMINGS=1 RECOMP_MAX_SECONDS=20 \
+"$task_root/build/recomp/pop_smoke" > "$task_root/build/task-4.2-smoke.log" 2>&1
+```
+
+Exit **0**, guest exit **0**, **21.0 s** logged (**21.150 s** process wall
+time), **4/4** steps, **438** guest presents (**3** changed from their
+predecessor), **3** dumps, **640x480 16bpp**, no undeliverable calls.
+Read the complete log. The smoke host also ignores `MAX_SECONDS`; its
+deadline is 180 seconds plus grace. The script's waits sum to
+**15 + 4 + 2 = 21 seconds**, so it completed naturally and the requested
+**20-second measurement** is a window within this run, not a claimed
+20-second process lifetime. No script or host deadline was changed.
+
+The file named `1` contains **2488** timing rows: **417 new**, **2071
+repeats**, all `display_ack=0` because this is offscreen. Counting
+`repeat=0` in `[first presented_s, first presented_s + 20)` gives
+**402 / 20 = 20.10 new frames/s**. Including repeats gives **2401 / 20 =
+120.05/s**, which is not game frame rate or physical-display evidence.
+The whole-run guest-call counter averages **438 / 21 = 20.86/s** including
+startup. Its **22366 audio plays**, peak **0.782**, do not prove smoke music
+output; the smoke streaming limitation from Task 3.2 still applies.
+
+Ran the task's exact listing search:
+
+```sh
+grep -l "timeGetTime\|GetTickCount" analysis/decompiled/Pharaoh.exe/functions/*.asm | head
+```
+
+**No matches** (`grep` **1**, `head` **0**): these listings use numeric IAT
+operands. Used the adaptation's three supplied return addresses to find
+their containing functions with `rg`, then verified the import table and
+the actual six-byte `FF 15 2C F2 56 00` calls in the pinned executable:
+
+| Function/listing | Call | Return | Role |
+| --- | --- | --- | --- |
+| `FUN_004d6b60`, `functions/004d6b60.asm` | `004d6b73` | `004d6b79` | Per-iteration timestamp stored before the update/draw work; calls `FUN_004ddcb0`. |
+| `FUN_004ddcb0`, `functions/004ddcb0.asm` | `004ddcb2` | `004ddcb8` | Compares elapsed time with the speed-dependent simulation threshold; returns zero when not due. |
+| `FUN_004d0040`, `functions/004d0040.asm` | `004d0040` | `004d0046` | Returns milliseconds since its previous call and updates that timestamp. |
+
+All three target IAT **`0056f22c = WINMM.dll!timeGetTime`**.
+`FUN_00413ed0`'s idle message loop calls `FUN_004143c0` at `0041436a`,
+which calls `FUN_004d6b60`. Its draw path calls `FUN_004d0280`, which
+calls the delta helper at `004d02c5`, accumulates milliseconds, loads
+**`0x32 = 50`** at `004d02df`, compares at `004d02f5` and returns without
+drawing through `004d02fb` when below the threshold. Forced-redraw paths
+can bypass the gate. The outer loop polls this time gate; the helper does
+not sleep. This explains the measured approximately 20 FPS menu cadence.
+
+**Keep all five `frame_clock_*` sentinels.** The kit's
+`native_frame_clock` is called only by `k_GetTickCount`; `m_timeGetTime`
+returns `host_millis()` without that hook. IAT `0056f12c` is `GetTickCount`;
+its five numeric references in four listings belong to elapsed-time
+instrumentation, a stateful timed routine and the Bink loop, not this
+50 ms draw gate. No verified GetTickCount draw-wait site was identified,
+so `tests/test_game_config.py` needs no exception. There is no pacing
+override or claim of faster gameplay in this task.
+
+**Verification and delivery.** Converted each of the three smoke dumps
+with `.venv/bin/python kit/tools/recomp/ppm_to_png.py INPUT.ppm OUTPUT.png`:
+**3 conversions, exit 0**, all **640x480**. Visually inspected title and
+menu; Pillow confirms all PNGs match their PPMs and both menu captures are
+identical. `.venv/bin/python -m pytest -q tests` exited **0**, **4 passed**.
+`.venv/bin/python build/task-4.2-verify.py` exited **0**, checking identity,
+header parity, all three call instructions, the 50 ms gate, CSV counts,
+images, PCM, logged results and ignored artifacts. The original
+`Pharaoh.ini` content and timestamp are unchanged; no save/settings files
+were added under `original/gog/app`. Both test profiles and all captures,
+logs and helper/metric files remain ignored under `build/`.
+An extra TOML/link check initially exited **1** because this Python lacks
+`tomllib`; using the installed `tomli` fallback exited **0**, confirming
+identical parsed config values and valid local documentation links.
+
+Only `game.toml` comments, this record, README's launch/hand-check guidance
+and the game changelog are committed. Git whitespace and staged-scope
+checks passed. No native suites or formatter were run because native code
+and config values are unchanged. No new kit commit, re-pin,
+landing-checkout change, other-platform run or push was performed.
 
 #### 2026-09-14: Task 4.1 reaches Nubt; menu save/reload remains untested
 

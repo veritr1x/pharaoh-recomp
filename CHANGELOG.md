@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Document how to launch and manually check the macOS app. Task 4.2's
+  automated captures show the title before and after an attempted click;
+  quitting faults after guest exit 0. Measure 20.10 new frames/s over a
+  20-second smoke interval and verify the timeGetTime-based 50 ms draw gate;
+  keep all frame-clock sentinels. No kit change or hand-play claim.
 - Add `smoke/first-mission.script` for a fresh profile: enter family `pyn`,
   begin the Predynastic campaign, continue through Nubt's briefing and
   dismiss the housing tutorial. The eighth smoke round reaches the city;
