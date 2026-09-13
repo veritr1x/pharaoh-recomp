@@ -149,9 +149,9 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
-#### 2026-09-13: Task 1.4 compiles; headless boot blocked by the build target
+#### 2026-09-13: Task 1.4 compiles; headless boot blocked by the loader
 
-Game main `324cb37`, kit branch `pharaoh` at `969f027` (the existing
+Initial build: game main `324cb37`, kit branch `pharaoh` at `969f027` (the existing
 submodule pin). Both checkouts were clean before this task.
 
 - Ran the prescribed build command from the game repository:
@@ -194,6 +194,60 @@ submodule pin). Both checkouts were clean before this task.
   log-filter commands were not run because the executable is absent.
 - Read-only Python artifact/count checks exited 0. No native or portable
   test suites were run: the only tracked change is this run-log entry.
+
+Resumed the same task on game main `c38d1da`, after `517de9a` recorded
+the app build and the plan was corrected to build each host explicitly.
+Kit remained on `pharaoh` at `969f027`; both checkouts were clean.
+
+- Ran the remaining builds without regenerating the translation:
+
+  ```sh
+  .venv/bin/python tools/build.py --target headless --jobs 8 2>&1 | tail -3
+  .venv/bin/python tools/build.py --target smoke --jobs 8 2>&1 | tail -3
+  find build -name pop_headless -o -name pop_smoke
+  ```
+
+  Each build and its `tail` exited **0**, captured from the shell's
+  pipeline statuses. Both hosts linked. The smoke build's final output
+  included `5 warnings generated.`; the three-line tail does not establish
+  a total compiler warning count. `find` exited **0** and returned exactly
+  `build/recomp/pop_headless` and `build/recomp/pop_smoke`.
+- Rechecked `recomp_env("LOG")` and retained `RECOMP_LOG=1`. A read-only
+  Python check of the executable's SHA-256, image base and entry point
+  matched the pinned identity above and exited **0**.
+- Ran Step 2 using the located headless binary:
+
+  ```sh
+  RECOMP_MAX_SECONDS=10 RECOMP_HOST_DUMP_DIR=build/frames RECOMP_LOG=1 \
+    build/recomp/pop_headless > build/headless-1.log 2>&1
+  ```
+
+  The host exited **2**, before guest execution or the ten-second cap.
+  The complete log is one line (63 bytes):
+
+  ```text
+  headless: loader_load: image does not fit below the heap arena
+  ```
+
+  `kit/runtime/loader.cpp` rejects `image_base + size_image > HEAP_BASE`
+  before mapping the image or binding imports. **No first missing import
+  was reached**; this run never called `_AIL_startup@0` or set a display
+  mode. This loader failure is the blocker; no runtime fix was attempted.
+- Ran both prescribed log filters. `grep -c "frame_"
+  build/headless-1.log` printed **0** and exited **1** (no match). The
+  `grep -iE "trampoline|no shim|missing|fault|abort"` pipeline printed
+  nothing; its statuses were **1, 0, 0, 0, 0** for `grep`, `sort`, `uniq`,
+  `sort`, `head`. The loader error contains none of those search terms.
+- **Frames written: 0.** Read-only Python artifact assertions exited **0**:
+  both host binaries exist, the log contains exactly the loader error,
+  there are zero `frame_*` files in either `build/frames` (absent) or
+  `build/recomp/frames` (created, empty), and
+  `build/recomp/run-report.json` is absent. No import-hit report was
+  produced. **First 20 distinct runtime warning lines: none (0)**; the
+  sole diagnostic is the loader error quoted above.
+- `git check-ignore` exited **0** for the log, both binaries and the
+  headless frame directory. No smoke execution, native or portable test
+  suites, regeneration or kit changes were performed during the resume.
 
 #### 2026-09-13: identify the missing function at 0x004ab2af
 
