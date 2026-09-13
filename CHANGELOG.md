@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add the first dump-only smoke script and record its macOS boot result:
+  640x480 at 16 bpp, a uniform black capture, and `ExitProcess(0)` after
+  `Unable to load BINK!`. The main menu was not reached. The kit remains
+  pinned at `17b31a0`; no additional shim fix or campaign click was made.
 - Re-pin the kit with `GetDeviceCaps` reading the DirectDraw mode,
   `GetTextExtentPointA` sharing the fixed text metrics, and `SetBkColor`
   returning the previous per-DC color (initially white). All 10 new runtime

@@ -1,0 +1,5 @@
+# Attempt to boot to the main menu and dump the presented frame.
+# Current result: a black 640x480 frame; the game logs "Unable to load BINK!"
+# and exits. See docs/analysis.md, Task 2.6. No menu click is verified yet.
+wait 15000
+dump main-menu

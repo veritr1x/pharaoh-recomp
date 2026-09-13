@@ -149,6 +149,83 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-13: Task 2.6 smoke boot exits after the Bink failure; no menu
+
+Started on game main `554a148` and kit branch `pharaoh` at `17b31a0`,
+with both checkouts clean. The kit already includes the Phase 2 Miles
+arity table, Bink/Smacker failure stubs and 15 Win32 shims. No kit changes,
+submodule re-pin, regeneration or fix-and-rerun rounds were made here.
+
+- Rebuilt all three hosts first, in order, without `--regenerate`:
+
+  ```sh
+  .venv/bin/python tools/build.py --jobs 8 2>&1 | tee build/task-2.6-app-build.log | tail -3
+  .venv/bin/python tools/build.py --target headless --jobs 8 2>&1 | tee build/task-2.6-headless-build.log | tail -3
+  .venv/bin/python tools/build.py --target smoke --jobs 8 2>&1 | tee build/task-2.6-smoke-build.log | tail -3
+  ```
+
+  Each build, `tee` and `tail` exited **0**, captured from the shell's
+  pipeline statuses. Full logs contain **6 / 0 / 10** compiler warning
+  diagnostics respectively, and **0** compiler error diagnostics.
+  Read-only SHA-256, image-base and entry-point assertions matched the
+  pinned executable and exited **0**.
+- Created `smoke/main-menu.script` with `wait 15000` and `dump main-menu`,
+  then ran the prescribed command once:
+
+  ```sh
+  RECOMP_SCRIPT=$PWD/smoke/main-menu.script RECOMP_HOST_DUMP_DIR=build/smoke \
+  RECOMP_DDRAW_MODES=640x480x16,800x600x16,1024x768x16 RECOMP_SMOKE_DRAWABLE=1024x768 \
+  RECOMP_MAX_SECONDS=30 build/recomp/pop_smoke > build/smoke-1.log 2>&1
+  ```
+
+  The host exited **0**, reporting **15.0 seconds**, **1/1 script steps**,
+  **640x480 16bpp**, **308 presented frames** (one differing from the
+  previous frame), **0 audio plays** and **no undeliverable calls**.
+  The stop was **guest called `ExitProcess`**, not the watchdog. The log
+  records `Unable to load BINK!`, then `ExitProcess(0)` and guest exit 0.
+  The host's `all expectations met` has no menu assertion behind it:
+  this is a dump-only script, and its capture is black.
+- The prescribed conversion command
+  `.venv/bin/python kit/tools/recomp/ppm_to_png.py
+  build/smoke/main-menu.ppm build/smoke/main-menu.png` exited **1** with
+  `FileNotFoundError`: the smoke host actually wrote
+  `build/smoke/smoke_main-menu_present.ppm`. Converted that existing dump
+  with `.venv/bin/python kit/tools/recomp/ppm_to_png.py
+  build/smoke/smoke_main-menu_present.ppm build/smoke/main-menu.png`,
+  exit **0**. This was artifact inspection, not another host run.
+  **The only PNG produced is `build/smoke/main-menu.png`: 640x480,
+  uniformly black, with no title, menu or buttons.** Visual inspection
+  and a Pillow count agree: all **307,200 pixels** are RGB `(0, 0, 0)`.
+- Read the full `build/smoke-1.log` and its last 40 lines. First distinct
+  warnings/diagnostics in log order:
+
+  1. `boot: the mod loader reported a failure`.
+  2. DirectDraw warns that the offered modes omit `640x480x8` and that a
+     front end selecting that mode unchecked would fail. This run actually
+     selected **640x480x16**; the warning does not prove a refused call.
+  3. `gdi: TextOutA is accepted and not drawn in this runtime`.
+  4. `OutputDebugString: Unable to load BINK!`.
+  5. `ExitProcess(0)`.
+  6. `guest process exited with code 0`.
+  7. `stopped: guest called ExitProcess`.
+- **Stopped at Step 1's expected menu result.** The observed stop is a
+  normal guest exit following the unavailable-video diagnostic. The log
+  identifies no unknown-arity or unimplemented import, wrong stdcall
+  arity, or missing case/drive-letter file. It does not report a guest
+  fault, abort or failed DirectDraw/COM call. Changing video behavior is
+  outside the task's permitted fixes, so no further diagnosis or rerun
+  was attempted. Step 2's menu coordinates, campaign click and second
+  dump remain undone. `sierra.ini` optionality and the drive-letter music
+  path remain unverified; no `RECOMP_LOG=1` follow-up was run.
+- `.venv/bin/python -m pytest -q tests` exited **0**, **4 passed**.
+  Read-only log/artifact assertions, both repositories' whitespace checks,
+  and `git check-ignore` for all six new logs/captures exited **0**.
+  No native suite was rerun because there is no native change; the
+  previously recorded runtime baseline remains **32 failures**, not a
+  fresh result. No headless/app execution, other-platform build or push
+  was performed. README, changelog and script comments describe the
+  observed failure to reach the menu; the kit pin remains `17b31a0`.
+
 #### 2026-09-13: Task 2.5 implements the three gdi32 gaps
 
 Kit commit `17b31a0` implements `GetDeviceCaps`, `GetTextExtentPointA` and

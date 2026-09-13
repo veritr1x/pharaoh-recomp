@@ -29,23 +29,22 @@ The GOG installer ships one game executable, **`Pharaoh.exe`** (Pharaoh
 2.1.0.0, built 2000-08-28, Visual C++ 6 with the C runtime linked
 statically). It renders through **DirectDraw** version 1, which the kit
 models, and plays sound and MP3 music through the **Miles Sound System**
-(`mss32.dll`), which the kit does not serve yet; its cinematics are Bink and
-Smacker video. The measurements are in [docs/analysis.md](docs/analysis.md).
+(`mss32.dll`), which the kit currently handles with silent shims; its
+cinematics are Bink and Smacker video, whose stubs refuse to open a video.
+The measurements are in [docs/analysis.md](docs/analysis.md).
 
-## Status: the executable translates with one gate waived; nothing runs yet
+## Status: smoke boot exits before the main menu on macOS; silent
 
-The config loads through the kit, the config tests pass, the game links,
-Ghidra exports the listings (4,502 functions) and the kit's translator
-turns the executable into C (6,138 of 6,141 functions) once its jump-table
-gate is waived for one Visual C++ switch whose function Ghidra missed.
-`tools/build.py --regenerate` stops at that gate, so nothing has been
-compiled or run; the run log at the end of
-[docs/analysis.md](docs/analysis.md) has the measurements.
+The app, headless and smoke hosts build. The first run of
+`smoke/main-menu.script` selects 640x480 at 16 bpp, logs
+`Unable to load BINK!`, then calls `ExitProcess(0)`. Its captured frame is
+uniform black; the main menu and campaign click remain unverified.
+The [run log](docs/analysis.md) records the commands, diagnostics and dump.
 
-The kit work this game will need, from the import table alone: a Miles
-Sound System shim (41 imports, the whole audio path), Bink and Smacker
-video stubs or decoders (19 imports), and 15 user32, gdi32 and kernel32
-functions the kit has not needed before.
+The pinned kit includes silent Miles shims (41 imports), Bink and Smacker
+failure stubs (19 imports), and the 15 missing user32, gdi32 and kernel32
+shims. Their native checks are recorded in the run log; this smoke run
+does not establish a working menu, gameplay, audio or cinematic skipping.
 
 ## Build on macOS
 
