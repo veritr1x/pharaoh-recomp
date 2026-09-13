@@ -34,20 +34,21 @@ cinematics are Bink and Smacker video. The Bink shim returns a finished
 video record to skip decoding; Smacker still refuses to open a video.
 The measurements are in [docs/analysis.md](docs/analysis.md).
 
-## Status: Bink open failure removed; smoke still exits before the menu on macOS
+## Status: retained-pointer checks pass; macOS smoke capture remains black
 
-The app, headless and smoke hosts build. The latest run of
-`smoke/main-menu.script` selects 640x480 at 16 bpp and no longer logs
-`Unable to load BINK!`, but still calls `ExitProcess(0)`. Its captured
-frame is uniformly black; the main menu and campaign click remain unverified.
-The [run log](docs/analysis.md) records the commands, diagnostics and dump.
+The app, headless and smoke hosts build. Task 2.8's DirectDraw regression
+passes for writes through pointers retained after `Unlock`, with the CPU
+recording path shared with written locks. The rebuilt smoke host still
+captures a uniformly black 640x480 frame: 314 presented frames, with
+non-black figures of 0.000. The latest run exits through `ExitProcess(0)`
+after 15 seconds. The main menu and gameplay remain unverified.
 
 The working kit includes silent Miles shims (41 imports), Bink and Smacker
 shims (19 imports), and the 15 missing user32, gdi32 and kernel32 shims.
-Native checks pass for the finished Bink record and its release. Task 2.7
-stopped at the unmet smoke capture expectation, so its changes are not
-committed and the kit pin remains `17b31a0`. The run does not establish a
-working menu, gameplay or audio; the remaining guest exit is undiagnosed.
+The retained-pointer changes pass 137,844 native checks, but Task 2.8
+stopped at the unmet smoke capture expectation. They remain uncommitted;
+the kit pin is still `1ced72b`. The [run record](docs/analysis.md) gives the
+commands, capture and limits. The remaining black-frame cause is unknown.
 
 ## Build on macOS
 

@@ -149,6 +149,96 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-13: Task 2.8 retained-pointer regression passes; smoke remains black
+
+Started on game `main` at `d49d0fa2714c657c90c42374bdbd9fe2d99660ab`
+and kit `pharaoh` at `1ced72b50a307cb6e24529efbf6512c6f3d20fb8`.
+Kit was clean; the game's unrelated untracked `1/` directory was preserved.
+The separate kit landing checkout remained unchanged at main `31f0f24`.
+
+- `kit/dx/com.h` adds `retained_pointer` and `retained_hash`. Every accepted
+  writable Lock sets the flag permanently. `kit/dx/ddraw.cpp` hashes every
+  byte in the requested guest rectangle (excluding pitch padding), and
+  refreshes it before `d3d_read_surface(..., HOST_READ_BLT_SOURCE)` in both
+  `Surface_Blt` and `Surface_BltFast`.
+- `record_cpu_write_rects` factors the existing `lock_shadow_record` payload,
+  coverage, palette lease, frame record and `d3d_cpu_write` sequence so the
+  refresh uses the same renderer write path. It then calls
+  `ddraw_note_cpu_write_impl` and `surface_pixels_changed`. Normal Unlock
+  refreshes the full-surface hash baseline; recorded primary writes update
+  it before presentation so their records are not duplicated.
+- The present entry point is **`ddraw_present` in `kit/dx/ddraw.cpp`**. It
+  calls the helper on the primary's full rectangle before the existing
+  flush and `host_present`. If the write notification recursively presents
+  the changed primary, the outer call returns without presenting twice.
+  `kit/dx/ddraw.h` declares the refresh helper; `ddraw_surface_revision`
+  was already declared there. No `host_api.h` or host source edit was needed.
+- `test_retained_pointer_writes`, next to `test_blt_and_colorkey`, uses the
+  actual `S_Lock`, `S_Unlock`, `S_BltFast`, `S_Blt`, `com_this(...)->id`,
+  `call_method`, `sc` and `gm_zero` helpers. It covers retained back-buffer
+  writes, an unchanged repeat, a single changed final pixel through Blt,
+  a surface only locked read-only, and direct primary presentation. Seven
+  additional post-implementation checks inspect the frame-owned CPU record
+  and its RGB565 payload/coverage before the blit record.
+
+Verification, in task order:
+
+```sh
+.venv/bin/python kit/tools/test.py --game-dir "$PWD/kit/games/stub" --compile-only
+.venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests --output-on-failure
+.venv/bin/python kit/tools/format.py --write
+.venv/bin/python kit/tools/test.py --game-dir "$PWD/kit/games/stub" --compile-only
+.venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests --output-on-failure | tee build/task-2.8-green-dx.log | tail -3
+.venv/bin/python tools/build.py --target smoke --jobs 8 2>&1 | tee build/task-2.8-smoke-build.log | tail -2
+RECOMP_SCRIPT=$PWD/smoke/main-menu.script RECOMP_HOST_DUMP_DIR=build/smoke \
+RECOMP_DDRAW_MODES=640x480x16,800x600x16,1024x768x16 RECOMP_SMOKE_DRAWABLE=1024x768 \
+RECOMP_MAX_SECONDS=30 build/recomp/pop_smoke > build/smoke-8.log 2>&1
+grep -E "non-black|presented frames" build/smoke-8.log
+.venv/bin/python kit/tools/recomp/ppm_to_png.py build/smoke/smoke_main-menu_present.ppm build/smoke/main-menu.png
+```
+
+- Test-first stub compile: exit **0**, **1** existing unused-variable warning
+  (`stalls`), **0** errors. Red CTest: exit **8**, **137,837 checks / 3
+  failures**, **0/1** suites passed. The failures were exactly the back
+  revision after BltFast, back revision after Blt, and primary revision
+  after direct presentation. Pixel checks already passed in the shim test.
+- Formatter ran twice, including after adding the payload assertions: both
+  exit **0**, **237** handwritten files, with changes only in task files.
+  Final stub compile: exit **0**, **11** compiler warning diagnostics,
+  **0** errors. Green CTest: exit **0**, **137,844 checks / 0 failures**,
+  **1/1** suites passed, including `retained pointer writes`. Its `tee` and
+  `tail` each exited **0**. Build/CTest output is under ignored
+  `build/task-2.8-{red,green}-*.log`; passing details are in
+  `build/task-2.8-green-dx-detail.log`.
+- Smoke build, `tee` and `tail`: each exit **0**, **10** compiler warning
+  diagnostics, **0** errors. No translator or `x86.h` change, so no
+  regeneration. Read-only executable assertions matched the pinned SHA-256,
+  image base `0x00400000` and entry `0x00562fea`, exit **0**.
+- Smoke host: exit **0**, **15.0 seconds**, **1/1** script steps,
+  **640x480 16bpp**, **314 presented frames**, **1** differing from its
+  predecessor. The log says **guest called `ExitProcess`**, guest exit 0,
+  zero audio plays and no undeliverable calls. The run records 304 blit
+  source reads and 12 lock reads. These counters do not establish a menu.
+- The prescribed grep and PNG conversion each exited **0**. Non-black:
+  **scene best 0.000, at a dump 0.000, presented 0.000**.
+  **PNG: `build/smoke/main-menu.png`, 640x480, uniformly black; no title,
+  menu text or buttons.** Visual inspection and Pillow agree: **0 of
+  307,200 pixels non-black**. Artifact timestamps confirm the PPM was
+  produced after the rebuilt smoke binary and the PNG after the PPM.
+- Additional checks: `.venv/bin/python -m pytest -q tests` exited **0**,
+  **4 passed**; from `kit/`, `../.venv/bin/python -m pytest -q
+  tests/test_game_literals.py` exited **0**, **3 passed**;
+  `.venv/bin/python kit/tools/check_game_literals.py` exited **0**, no
+  findings. Both repositories' `git diff --check`, pinned-image and
+  artifact assertions, and ignored-artifact checks exited **0**.
+
+**Stopped at Step 4's unmet smoke expectation**, following the task's stop
+rule. The native regression passes, but the cause of the remaining black
+capture is unknown. No further diagnosis, alternate design, rerun, menu
+interaction or Step 5 commit was performed. The scoped implementation and
+documentation remain uncommitted; the game pin remains `1ced72b`. No
+runtime-suite execution, other-platform build or push was performed.
+
 #### 2026-09-13: Task 2.7 returns a finished Bink video record
 
 Started on game main `c81b046` and kit branch `pharaoh` at `17b31a0`,

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Task 2.8 working changes detect DirectDraw writes through pointers retained
+  after `Unlock`, sharing the written-lock CPU recording path before blits
+  and primary presentation. The native regression passes (137,844 checks,
+  zero failures), but the rebuilt macOS smoke host still captures uniform
+  black: 314 presented frames and non-black 0.000. Stopped at Step 4's unmet
+  menu expectation; no Task 2.8 commits or re-pin, so kit stays `1ced72b`.
 - Task 2.7 working changes: Bink returns a finished 640x480 video record
   with zero frame counters and frees it on close. Native checks pass;
   the macOS smoke log no longer says `Unable to load BINK!`, but still
