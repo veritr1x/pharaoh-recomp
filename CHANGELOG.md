@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Re-pin the kit with `tools/build.py --regenerate --allow-table-gaps
+  "<reason>"` support, forwarding the waiver and its reason to the translator.
+  Builds without the flag keep the existing jump-table gap checks.
 - The kit submodule moves to kit main `31f0f24` (the previous pin `c2b4e93`
   was rewritten away); kit work for this game happens on the submodule's
   `pharaoh` branch and lands on main.
