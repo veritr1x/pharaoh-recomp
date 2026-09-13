@@ -149,6 +149,52 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-13: Task 1.4 compiles; headless boot blocked by the build target
+
+Game main `324cb37`, kit branch `pharaoh` at `969f027` (the existing
+submodule pin). Both checkouts were clean before this task.
+
+- Ran the prescribed build command from the game repository:
+
+  ```sh
+  .venv/bin/python tools/build.py --regenerate --jobs 8 2>&1 | tee build/build-1.log | tail -20
+  ```
+
+  Captured the shell's pipeline statuses immediately afterward: build,
+  `tee` and `tail` each exited **0**. The full output remains in ignored
+  `build/build-1.log`.
+- Translation closed without a waiver: 6,136 of 6,139 functions, 10,517
+  entry points; 839 constant-displacement jump-table sites, 820 decoded,
+  34,111 entries, zero entries dispatching nowhere and zero sites decoding
+  nothing. The translator still reported one recovery error; this run did
+  not investigate or change it.
+- All 32 generated C files compiled: `chunk_000.c` through `chunk_030.c`
+  plus `table.c`. The generated archive linked, followed by `recomp_app`
+  at `build/PharaohRecomp.app/Contents/MacOS/PharaohRecomp`. There were no
+  compiler error diagnostics and 21 compiler warning diagnostics about
+  C-linkage functions returning C++ user-defined types.
+- **Blocker before Step 2:** `build/recomp/pop_headless` and
+  `build/recomp/pop_smoke` do not exist. In `kit/tools/build.py`,
+  `--target` defaults to `app`, which builds only `recomp_app`;
+  `headless` and `smoke` are separate targets. The prescribed Step 1
+  command therefore does not produce the executable Step 2 requires.
+  Stopped without adding target builds or changing the kit, as instructed
+  for a step that cannot be completed as written.
+- Verified that `RECOMP_LOG=1` is real: `runtime/memory.cpp` reads
+  `recomp_env("LOG")`, and `platform/env.cpp` supplies the `RECOMP_`
+  prefix. The headless host reads `recomp_env("FRAMES")` for captures,
+  defaulting to `build/recomp/frames`; the prescribed `HOST_DUMP_DIR`
+  switch is read by `host/present_pixels.cpp` instead.
+- No headless process was launched, so there is **no host exit code or
+  exit reason, no first missing import reached, and no runtime warning
+  lines to list**. Zero frame files exist in either `build/frames` or
+  `build/recomp/frames` (neither directory exists); this is not a measured
+  zero-frame boot. `build/headless-1.log` and
+  `build/recomp/run-report.json` were not produced. Step 2 and its two
+  log-filter commands were not run because the executable is absent.
+- Read-only Python artifact/count checks exited 0. No native or portable
+  test suites were run: the only tracked change is this run-log entry.
+
 #### 2026-09-13: identify the missing function at 0x004ab2af
 
 The missing function at `0x004ab2af` is `0x004a98b0` (`ENTRY_4AB`),
