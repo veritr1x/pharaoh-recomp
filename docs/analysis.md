@@ -149,6 +149,33 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-13: identify the missing function at 0x004ab2af
+
+The missing function at `0x004ab2af` is `0x004a98b0` (`ENTRY_4AB`),
+referenced from the `.data` pointer at `0x005dc3e0` (bytes `b0 98 4a 00`).
+The prescribed memory-image scan found this one absolute reference and no
+direct `E8 rel32` calls to the entry in RVAs `[0x1000, 0x16e000)`. This is
+evidence for entry through a data pointer; the indirect caller's dispatch
+instruction was not traced.
+
+- Rechecked the pinned executable's SHA-256, image base `0x00400000` and
+  executable entry `0x00562fea`; all matched.
+- Linear disassembly from `0x004a985b` exposes ten NOPs at
+  `0x004a98a6`-`0x004a98af`, followed by the aligned entry's initial load
+  (`a1 f8 56 d0 00`), `sub esp, 0x200` at `0x004a98b5`
+  (`81 ec 00 02 00 00`), and saved EBX, ESI and EDI at `0x004a98c0`,
+  `0x004a98c6` and `0x004a98cc` (`53`, `56`, `57`).
+- A fresh disassembly starting at `0x004a98b0` covers 1,649 contiguous
+  instructions / 6,705 bytes through `0x004ab2e1` exclusive, including
+  `cmp edi, 0x20` at `0x004ab29e`, the switch at `0x004ab2af`,
+  `add esp, 0x200` at `0x004ab2da` and `ret` at `0x004ab2e0`.
+  Instruction-boundary, padding and pointer assertions all passed. This
+  verification span is not the function's complete extent.
+- Both prescribed Python checks and the identity, prologue and contiguous
+  disassembly checks exited 0. Local prologue bytes and reference evidence
+  are in ignored `analysis/notes/004ab2af.md`. No listings or configuration
+  changed; no translation, native build or game run was performed.
+
 #### 2026-09-13: repository created; the translator runs through with one gate waived
 
 Kit main c2b4e93, the submodule pin. `tools/setup.py --link-only` accepts
