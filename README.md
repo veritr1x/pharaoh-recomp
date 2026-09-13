@@ -30,21 +30,24 @@ The GOG installer ships one game executable, **`Pharaoh.exe`** (Pharaoh
 statically). It renders through **DirectDraw** version 1, which the kit
 models, and plays sound and MP3 music through the **Miles Sound System**
 (`mss32.dll`), which the kit currently handles with silent shims; its
-cinematics are Bink and Smacker video, whose stubs refuse to open a video.
+cinematics are Bink and Smacker video. The Bink shim returns a finished
+video record to skip decoding; Smacker still refuses to open a video.
 The measurements are in [docs/analysis.md](docs/analysis.md).
 
-## Status: smoke boot exits before the main menu on macOS; silent
+## Status: Bink open failure removed; smoke still exits before the menu on macOS
 
-The app, headless and smoke hosts build. The first run of
-`smoke/main-menu.script` selects 640x480 at 16 bpp, logs
-`Unable to load BINK!`, then calls `ExitProcess(0)`. Its captured frame is
-uniform black; the main menu and campaign click remain unverified.
+The app, headless and smoke hosts build. The latest run of
+`smoke/main-menu.script` selects 640x480 at 16 bpp and no longer logs
+`Unable to load BINK!`, but still calls `ExitProcess(0)`. Its captured
+frame is uniformly black; the main menu and campaign click remain unverified.
 The [run log](docs/analysis.md) records the commands, diagnostics and dump.
 
-The pinned kit includes silent Miles shims (41 imports), Bink and Smacker
-failure stubs (19 imports), and the 15 missing user32, gdi32 and kernel32
-shims. Their native checks are recorded in the run log; this smoke run
-does not establish a working menu, gameplay, audio or cinematic skipping.
+The working kit includes silent Miles shims (41 imports), Bink and Smacker
+shims (19 imports), and the 15 missing user32, gdi32 and kernel32 shims.
+Native checks pass for the finished Bink record and its release. Task 2.7
+stopped at the unmet smoke capture expectation, so its changes are not
+committed and the kit pin remains `17b31a0`. The run does not establish a
+working menu, gameplay or audio; the remaining guest exit is undiagnosed.
 
 ## Build on macOS
 

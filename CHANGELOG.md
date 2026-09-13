@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Task 2.7 working changes: Bink returns a finished 640x480 video record
+  with zero frame counters and frees it on close. Native checks pass;
+  the macOS smoke log no longer says `Unable to load BINK!`, but still
+  exits with code 0 and captures uniform black. Stopped at that unmet
+  expectation without further fixes or commits; kit pin stays `17b31a0`.
 - Add the first dump-only smoke script and record its macOS boot result:
   640x480 at 16 bpp, a uniform black capture, and `ExitProcess(0)` after
   `Unable to load BINK!`. The main menu was not reached. The kit remains

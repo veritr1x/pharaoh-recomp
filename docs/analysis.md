@@ -149,6 +149,134 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-13: Task 2.7 returns a finished Bink video record
+
+Started on game main `c81b046` and kit branch `pharaoh` at `17b31a0`,
+with both checkouts clean. Before implementation, read
+`analysis/decompiled/Pharaoh.exe/functions/00413690.asm` and its `.c`:
+the Bink record is loaded from the video object's `+0x10`. The loop reads
+record width `+0x00` at `0x00413718` and height `+0x04` at `0x00413725`
+to centre it. It reads current frame `+0x14` and frame count `+0x10`
+at `0x00413736`/`0x00413739`, compares them unsigned at `0x0041373c`,
+and branches to cleanup at `0x00413826` when current >= count. The
+bottom-of-loop comparison reads the same counters at
+`0x00413816`/`0x00413819`. **No other Bink record fields are read in
+either listing.** The object's centring fields `+0x14`/`+0x18` are not
+fields in the Bink record. All record bytes except width and height
+remain zero, including `+0x08` and both counters; this skips decoding.
+
+The test uses its existing `sc` scratch helper and the included
+`guest.h`'s `gm_put_str` (there is no `put_str` helper in `dx_tests.cpp`).
+`heap_owns` and `heap_free` are the actual names in `runtime/memory.h`.
+
+- Updated `test_bink_smack_stubs` first, then built against the kit's stub
+  game with `.venv/bin/python kit/tools/test.py --game-dir
+  "$PWD/kit/games/stub" --compile-only`: exit **0**, **1** existing
+  unused-variable compiler warning (`stalls`) and **0** compiler errors.
+  `.venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests
+  --output-on-failure` exited **8**, **137,791 checks / 3 failures**,
+  **0/1** suites passing. The first failure is exactly `bink != 0`;
+  width and height also failed, reading 0 instead of 640 and 480.
+- Implemented `BinkOpen` as a 16-byte-aligned, 256-byte guest heap block,
+  zeroed except for 640x480 dimensions, and `BinkClose` using `heap_free`.
+  The shim table points to those handlers; decoding, next-frame, service,
+  copy and wait remain no-ops returning 0. `BinkGetError` remains
+  `"no video decoder"`, and `SmackOpen` still returns 0.
+- `.venv/bin/python kit/tools/format.py --write` exited **0**, formatting
+  **237** handwritten files with changes confined to the task files.
+  Repeated the stub compile command: exit **0**, **0** compiler warnings
+  and **0** errors. Repeated CTest with `| tee build/task-2.7-green-dx.log
+  | tail -3`: CTest, `tee` and `tail` all exited **0**, **1/1** suites
+  passed, **137,791 checks / 0 failures**, including `Bink/Smacker stubs`.
+  The detailed passing output is retained from CTest's `LastTest.log` as
+  ignored `build/task-2.7-green-dx-detail.log`.
+- `.venv/bin/python tools/build.py --target smoke --jobs 8 2>&1
+  | tee build/task-2.7-smoke-build.log | tail -2` rebuilt the shim and
+  linked the smoke host. Build, `tee` and `tail` exited **0**, with
+  **0** compiler warnings/errors. No translator or `x86.h` changed and
+  no regeneration was needed. Read-only SHA-256, image-base and
+  entry-point assertions matched the pinned executable, exit **0**.
+- Ran the prescribed smoke command once:
+
+  ```sh
+  RECOMP_SCRIPT=$PWD/smoke/main-menu.script RECOMP_HOST_DUMP_DIR=build/smoke \
+  RECOMP_DDRAW_MODES=640x480x16,800x600x16,1024x768x16 RECOMP_SMOKE_DRAWABLE=1024x768 \
+  RECOMP_MAX_SECONDS=30 build/recomp/pop_smoke > build/smoke-2.log 2>&1
+  ```
+
+  Host exit **0**, **15.0 seconds**, **1/1 script steps**, **640x480
+  16bpp**, **315 presented frames** (one differing from the previous),
+  **0 audio plays**, **no undeliverable calls**. The stop is still
+  **guest called `ExitProcess`**, not the watchdog. The log contains
+  **0** occurrences of `Unable to load BINK!`. After the initial surfaces
+  and text warning it logs `AdjustWindowRectEx`, two more 640x480x16
+  mode/surface setups, then `ExitProcess(0)` and guest exit 0. Bink's
+  verbose open message is not enabled by this command; no extra tracing
+  run was made, and the reason for the remaining exit is unverified.
+- `.venv/bin/python kit/tools/recomp/ppm_to_png.py
+  build/smoke/smoke_main-menu_present.ppm build/smoke/main-menu.png`
+  exited **0**. **PNG: `build/smoke/main-menu.png`, 640x480, uniformly
+  black, with no title, menu or buttons.** Visual inspection and Pillow
+  agree: all **307,200 pixels** are RGB `(0, 0, 0)`. Read-only artifact
+  assertions exited **0**, confirming both the PPM and PNG were written
+  after this run started, not reused from Task 2.6.
+- Read all 71 log lines. First distinct warnings/diagnostics, in order:
+  mod-loader failure; DirectDraw's offered list omits `640x480x8`;
+  `TextOutA` is accepted but undrawn; `AdjustWindowRectEx` models no
+  non-client area; `ExitProcess(0)`; guest exit 0. The actual selected mode
+  is 640x480x16, so the 8-bpp warning does not establish a mode refusal.
+  No unimplemented/unknown-arity import or guest fault is reported.
+- `.venv/bin/python -m pytest -q tests`: **4 passed**, exit **0**.
+  From `kit/`, `../.venv/bin/python -m pytest -q
+  tests/test_game_literals.py`: **3 passed**, exit **0**.
+  `.venv/bin/python kit/tools/check_game_literals.py`: no findings, exit
+  **0**. Both repositories' `git diff --check` exited **0**. Read-only
+  assertions confirmed the last 30 lines below match the log exactly
+  and all **10** task logs/artifacts are ignored, exit **0**.
+- **Stopped at Step 4's unmet non-uniform capture expectation**, as
+  instructed. No further fixes, rerun, campaign click or Step 5 commit;
+  kit remains at `17b31a0` and game main at `c81b046`, with the scoped
+  working changes retained. README, both changelogs and the smoke script
+  comment describe the observed state. No native runtime suite,
+  other-platform build or push was performed. Logs and captures remain
+  under ignored `build/`; the script's `all expectations met` is not a
+  menu assertion.
+
+Last 30 lines of `build/smoke-2.log`:
+
+```text
+stopped:            guest called ExitProcess
+elapsed:            15.0s
+script:             1 of 1 steps
+display mode:       640x480 16bpp
+presented frames:   315 (1 of them different from the one before)
+HD textures:        0 world draws, 0 loads, 0 hits, 0 refused, 0 / 536870912 bytes
+terrain detail:     0 world tile draws
+Direct3D:           0 draws, 0 textures, 0 write-backs
+input:              0 changes announced, 0 reads by the guest
+audio:              0 plays, loudest sample 0.000
+non-black:          scene best 0.000 (at a dump 0.000), presented 0.000
+gameplay: phases: composite=0.5 unique=1 repeats=1771 drops=0 continuous=0/s throughput=0/s scene_reused=0 waits=0 faults=0
+access: lock_read=12 lock_write=0 getdc=0 blt_source=305 dstkey_read=0 duplicate=0 texture_load=0 flip=0 clean_reads=317
+--- DirectX objects ---
+live COM objects (0 of 9 created):
+audio channels in use: 0 of 0 allocated
+qmixer: waves opened 0 static, 0 streamed, 0 refused (record 0, format 0, data 0, streaming 0, no session 0)
+qmixer: plays asked 0, delivered 0, dropped 0 (no session 0, no wave 0, no channel 0, disabled 0, paused 0, session inactive 0, no host voice 0, wave empty 0, stream dry 0)
+qmixer: host plays 0, queues 0 accepted 0 refused (a refusal is the host saying no, not a host that was never asked)
+qmixer: Pump called 0 times, frame pump 15671089 times, 0 refills, 0 looks that found nothing to do
+qmixer: OpenChannel calls 0, EnableChannel 0 on / 0 off, ConfigureChannel 0; stops 0, pauses 0, waves freed 0
+qmixer: volume never set; frequency 0, position 0, distance mapping 0, cone 0
+-----------------------
+guest exit code:    0
+undeliverable calls: none
+
+dumps:
+    build/smoke/smoke_main-menu_present.ppm
+
+all expectations met
+```
+
 #### 2026-09-13: Task 2.6 smoke boot exits after the Bink failure; no menu
 
 Started on game main `554a148` and kit branch `pharaoh` at `17b31a0`,
