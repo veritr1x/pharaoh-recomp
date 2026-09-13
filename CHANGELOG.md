@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Re-pin the kit to `pharaoh` da6d418: add Android arm64/API 29 NDK presets
+  and a CI stub build, link the shared SDL host as `libmain.so`, and read
+  arm64 Linux/Android fault writes from ESR signal-frame records. The local
+  stub library links; APK packaging and Android gameplay remain unverified.
 - Add a `windows-2025` CI entry for portable tests and the stub build,
   retaining macOS and Linux. Document Linux and Windows build commands,
   the kit CI's Linux dependencies, `build/package` output and `RECOMP_EXE`.

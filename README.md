@@ -194,6 +194,27 @@ separator, especially game-data lookup and save/load. A confirmed separator
 failure needs a kit `platform/os_win32.cpp` fix with a `platform_tests`
 regression case; none has been observed or fixed in this task.
 
+## Android (in progress)
+
+The kit's `android-stub` preset builds an arm64-v8a shared host library for
+Android 10 (API 29), using NDK 27.2.12479018, static SDL3/libc++ and the NDK's
+Vulkan and log libraries. From this checkout on macOS:
+
+```sh
+export ANDROID_NDK_HOME="$HOME/Library/Android/sdk/ndk/27.2.12479018"
+export PATH="$PWD/.venv/bin:$PATH"
+cd kit
+cmake --preset android-stub
+cmake --build --preset android-stub --target recomp_app
+ls build/cmake/android-stub/host/libmain.so
+```
+
+Install that NDK through the Android SDK manager first; CMake and Ninja
+come from the venv prerequisites above. The local stub link passed; see
+the [Task 7.1 record](docs/analysis.md#2026-09-14-task-71-android-stub-shared-library-links).
+This library contains a stub translation. APK packaging, installation and
+game execution on Android remain unimplemented or unverified.
+
 ## Play on macOS
 
 After completing the build steps above, launch from this checkout with

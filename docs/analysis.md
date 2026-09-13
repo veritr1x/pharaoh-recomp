@@ -153,6 +153,64 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-14: Task 7.1 Android stub shared library links
+
+Resumed at Step 3, preserving the existing Android preset, CMake, CI and
+kit changelog edits. Kit `pharaoh` commit `da6d418` adds arm64-v8a/API 29
+presets, position-independent libraries, the shared `recomp_app` target
+with output name `main`, static SDL3/libc++, NDK Vulkan/log linkage, and
+Android guards around desktop-only targets. The CI job configures and
+builds the same stub target; GitHub Actions was not run.
+
+The only additional native source fix is `kit/mods/native/page_track.cpp`:
+retain the existing arm64 Darwin body under an Apple guard; on arm64
+Linux/Android, walk bounded records in `uc_mcontext.__reserved`, identify
+`ESR_MAGIC` (`0x45535201`, `esr_context`), and use the same data-abort EC and
+WnR classification. A missing ESR record returns false. The required
+ucontext header is guarded for Linux/Android. **No further source-error
+rounds were needed**, and `platform/os_posix.cpp` did not change.
+
+From `kit/`, with `ANDROID_NDK_HOME` set to
+`/Users/sattam.thakur/Library/Android/sdk/ndk/27.2.12479018` and the game's
+`.venv/bin` first on `PATH`:
+
+| Command | Actual result |
+| --- | --- |
+| `cmake --preset android-stub` | Exit 0; arm64-v8a, android-29, c++_static; SDL shared OFF/static ON. Three NDK CMake deprecation warnings. |
+| `cmake --build --preset android-stub --target recomp_app` | Exit 0 on the first resumed build; shared library linked. 21 existing keypad/presenter C-linkage warnings, zero compiler errors. |
+| `ls build/cmake/android-stub/host/libmain.so` | Exit 0; library exists. |
+| `stat -f '%N: %z bytes' build/cmake/android-stub/host/libmain.so` | Exit 0; 37,676,768 bytes. |
+| NDK `llvm-readelf -h -d build/cmake/android-stub/host/libmain.so` | Exit 0; ELF64 AArch64 shared object, SONAME libmain.so, dependencies include libvulkan.so and liblog.so, with no SDL3 or libc++ shared dependency. |
+
+The artifact is
+`kit/build/cmake/android-stub/host/libmain.so`; the link rule names
+`libSDL3.a` and uses `-static-libstdc++`. Ninja's dependency record includes
+`page_track.cpp` in `capture_seam.cpp.o`, and the object is newer than the
+modified source (read-only Python/Ninja check, exit 0).
+
+From the game repository, after the Android build:
+
+| Command | Actual result |
+| --- | --- |
+| `.venv/bin/python tools/test.py` | Exit 0; 101 passed, 3 skipped in 6.47 s. |
+| `.venv/bin/python kit/tools/format.py --write` | Exit 0; formatted 241 handwritten files; no unrelated changes. |
+| `.venv/bin/python kit/tools/check_game_literals.py` | Exit 0; no findings. |
+| `.venv/bin/python -m pytest -q kit/tests/test_game_literals.py` | Exit 0; 3 passed in 0.04 s. |
+| `.venv/bin/python kit/tools/check_repo.py` (staged kit) | Exit 0; tracked source boundaries and local documentation links passed. |
+| `.venv/bin/python -m pytest -q tests` | Exit 0; 4 passed in 0.01 s. |
+
+Read-only Python assertions confirmed the warning counts and parsed the CI
+YAML's configure/build/artifact-check steps (exit 0). Git whitespace checks
+passed in both repositories (exit 0).
+
+Full configure/build and portable-suite output stays in ignored
+`build/task-7.1-*-resume.log` and `build/task-7.1-portable-tests.log`.
+No generated code, binaries, logs, game assets or saves are committed.
+The library uses the kit's stub game; no game translation was regenerated.
+APK packaging, installation, real Android signal-handler execution and
+gameplay were not tested. Native runtime/DX suites were not run in this
+task; the evidence is the Android stub link and portable checks above.
+
 #### 2026-09-14: Task 6.3 Linux and Windows CI and instructions only
 
 Steps 1 and 2 were explicitly deferred: this Mac has no Linux or Windows
