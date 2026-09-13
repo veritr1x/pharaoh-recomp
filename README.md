@@ -29,22 +29,27 @@ The GOG installer ships one game executable, **`Pharaoh.exe`** (Pharaoh
 2.1.0.0, built 2000-08-28, Visual C++ 6 with the C runtime linked
 statically). It renders through **DirectDraw** version 1, which the kit
 models, and plays sound and MP3 music through the **Miles Sound System**
-(`mss32.dll`), which the kit currently handles with silent shims; its
+(`mss32.dll`), which the kit handles with WAV sample and MP3 stream shims; its
 cinematics are Bink and Smacker video. The Bink shim returns a finished
 video record to skip decoding; Smacker still refuses to open a video.
 The measurements are in [docs/analysis.md](docs/analysis.md).
 
-## Status: boots to the title screen and main menu in the smoke host on macOS; silent
+## Status: title screen, main menu, effects and music on macOS
 
 `smoke/main-menu.script` captures the 640x480 Cleopatra title screen with
 “Click to Start”, clicks its centre, and captures the five-button main menu
 four seconds later and again after another two seconds. Both menu captures
-are identical. The 21-second run presents 438 frames and exits through
-`ExitProcess(0)`, with zero audio plays. Menu-button selection and gameplay
-remain unverified.
+are identical. The 21-second smoke run presents 438 frames and exits through
+`ExitProcess(0)`. Miles WAV effects reach the smoke host's mixer; the effects
+run records the title-screen click at peak 0.782. In the headless host, the
+title-screen MP3 capture contains 24.092 seconds of audio, 23.8 seconds
+non-silent, with no logged underrun. The smoke host lacks streaming
+callbacks, so music output is verified in headless only. Menu-button
+selection, gameplay and the interactive macOS app remain unverified.
 
-The kit includes silent Miles shims (41 imports), Bink and Smacker shims
-(19 imports), and the 15 missing user32, gdi32 and kernel32 shims. The
+The kit is pinned to landed main `2fe5c5d` and includes Miles shims (41
+imports), Bink and Smacker shims (19 imports), and the 15 missing user32,
+gdi32 and kernel32 shims. The
 [run record](docs/analysis.md) gives the commands, captures, button
 coordinates and limits.
 
@@ -77,7 +82,7 @@ lives in ignored `original/` and the Ghidra listings in ignored `analysis/`.
 
 ## Play on an iPad
 
-Not yet: the game has to run on macOS first. When it does, the kit's
+Not yet verified on iPad. The kit's
 `tools/build.py --target ios` builds, signs and installs `PharaohRecomp.app`
 with the game minus `[bundle].exclude` in `game.toml` (GOG's support files,
 the Windows DLLs, the Miles plug-ins, the manuals).

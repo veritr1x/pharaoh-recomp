@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Land the Phase 2-3 kit work on kit main `2fe5c5d` and retain that exact
+  submodule pin. Record the full verification: 88 portable tests passed,
+  3 skipped, 4 game config tests passed, all 11 native `nogame` entries
+  passed, and runtime_tests retained its 32 known failures in 520 checks.
+  Update macOS status: title screen, main menu and effects in smoke; MP3
+  output in headless. Smoke streaming, gameplay and other platforms remain
+  unverified.
 - Re-pin the kit to `pharaoh` 2fe5c5d: Miles MP3 streams share DirectShow's
   decoder and refill through the frame pump, with volume, loop counts and
   playback completion. The macOS headless title run captures 24.092 seconds

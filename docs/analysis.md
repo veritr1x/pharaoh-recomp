@@ -38,6 +38,9 @@ exports (`analysis/decompiled/Pharaoh.exe/summary.txt` gives the counts).
 
 ## Import surface
 
+This is the initial import inventory; the Phase 2-3 run records below
+document the later shim implementations and their verification.
+
 197 imports across 10 DLLs. "Shimmed" counts the imports the kit's shim
 tables (`runtime/`, `dx/`, `host/`) name as of kit main c2b4e93; the rest
 bind to the kit's logging trampolines, which return 0 and pop only the
@@ -148,6 +151,82 @@ write it.
 ### Run log
 
 Recorded runs of the pipeline against this executable, newest first.
+
+#### 2026-09-14: land Phase 2-3 on kit main (Task 3.3)
+
+Started on clean game main `baad47b`, clean kit `pharaoh`
+`2fe5c5dcd967286138820338dd1cb71975aa0314`, and clean landing-checkout
+main `31f0f24`. Used the task's corrected test routes instead of
+`tools/test.py --native`: native `nogame` tests use the kit's stub game,
+while `runtime_tests` uses this game's image and build tree.
+
+Step 1 verification, in order (outputs retained under ignored
+`build/task-3.3-*.log`):
+
+| Command | Actual result |
+| --- | --- |
+| `.venv/bin/python tools/test.py` | Exit **0**; **88 passed, 3 skipped**. |
+| `.venv/bin/python -m pytest -q tests` | Exit **0**; **4 passed**. |
+| `.venv/bin/python kit/tools/test.py --game-dir /Users/sattam.thakur/Documents/Tests/pharaoh-recomp/kit/games/stub --compile-only` | Exit **0**; configured the stub tree, all test binaries current (`ninja: no work to do`); **0** compiler warnings/errors. |
+| `.venv/bin/ctest --test-dir kit/build/cmake/macos -L nogame --output-on-failure` | Exit **0**; **11/11 entries passed**, **0** failures. Per-entry counts below. |
+| `.venv/bin/python tools/test.py --compile-only` | Exit **0**; game-tree test binaries built, **6** existing compiler warnings, **0** errors. `profile_tests` is not defined because the translation has no `FN_00500040`. |
+| `.venv/bin/ctest --test-dir build/cmake/macos -R runtime_tests --output-on-failure` | Exit **8**; **520 checks, 32 failures**, **0/1** CTest entries passed. Output piped through `tee build/task-3.3-runtime.log` and `tail -40`; pipeline exits **8 / 0 / 0**. |
+| From `kit/`: `../.venv/bin/python tools/check_repo.py` | Exit **0**; tracked source boundaries and local documentation links passed. |
+| From `kit/`: `../.venv/bin/python tools/check_game_literals.py` | Exit **0**; no findings. |
+
+The `nogame` details were read from CTest's `LastTest.log` and retained in
+`build/task-3.3-nogame-detail.log`. Every entry passed:
+
+| Entry | Reported checks/tests |
+| --- | --- |
+| `platform_tests` | **79 checks, 0 failures** |
+| `host_api_header_check` | **1 passed entry**; one existing `#pragma once in main file` warning |
+| `dx_tests` | **138,479 checks, 0 failures** |
+| `null_host_link` | **1 passed entry**; weak defaults resolved |
+| `layout_tests` | **31 checks, 0 failures** |
+| `host_boundary_check` | **2 tests, OK** |
+| `shader_drift_check` | **1 test, OK** |
+| `input_touch_tests` | **1 passed entry**, reports `ok` without a check count |
+| `keypad_tests` | **1 passed entry**, reports `ok` without a check count |
+| `ui_layer_tests` | **115 checks, 0 failures** |
+| `gpu_fake_tests` | **26 checks, 0 failures** |
+
+A read-only Python comparison with `build/task-2.9-green-runtime.log`
+exited **0**: the same **32** failure messages remain, with no additions
+or removals. They are the known Populous-bound baseline recorded in Task
+2.3a, not a passing runtime suite. Other game-labelled, GPU/device, mod,
+gameplay and integration suites were **not run**. A read-only byte
+comparison also exited **0**: generated `build/recomp/gen/x86.h` matches
+`kit/runtime/x86.h`. No regeneration or native source change was needed.
+
+Step 2 landed the existing branch without a merge or rebase:
+
+```sh
+cd /Users/sattam.thakur/Documents/Tests/recomp-kit
+git -c protocol.file.allow=always pull --ff-only /Users/sattam.thakur/Documents/Tests/pharaoh-recomp/kit pharaoh
+git push origin main
+cd /Users/sattam.thakur/Documents/Tests/pharaoh-recomp
+git -C kit -c protocol.file.allow=always fetch local main
+git -C kit checkout -q -B pharaoh local/main
+```
+
+All four Git operations exited **0**. The pull fast-forwarded main from
+`31f0f24` to `2fe5c5d`; the explicitly authorized push updated only kit
+main at its GitHub origin. From the landing checkout,
+`git ls-remote --exit-code origin refs/heads/main` exited **0** and returned
+**`2fe5c5dcd967286138820338dd1cb71975aa0314`**, matching landing main,
+submodule `pharaoh` and `local/main`. No new kit commit was created.
+The game already pinned this exact commit, so staging `kit` produces no
+gitlink difference; this task records that its existing pin is now on main.
+
+README and CHANGELOG now record the macOS title screen, main menu and
+Miles audio status established by Tasks 2.6, 3.1 and 3.2. Smoke verifies
+the menu transition and effects; the headless title capture establishes
+MP3 output. Smoke has no streaming callbacks, so its play counter does
+not establish music output. No new host run, listening test, main-menu
+music capture, gameplay or other-platform validation was performed here.
+Logs, generated files, binaries, game inputs and saves remain uncommitted;
+the game repository was not pushed.
 
 #### 2026-09-14: MP3 streams through Miles (Task 3.2)
 
