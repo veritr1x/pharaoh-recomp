@@ -315,10 +315,10 @@ Use the actual registration method name found in the grep (the plan names it `ad
 - [ ] **Step 5: Run the kit tests**
 
 ```bash
-cd kit && ../.venv/bin/python -m pytest -q tools/recomp/tests/test_translate_config.py tools/recomp/tests
+.venv/bin/python tools/test.py      # from the game repository: it sets RECOMP_GAME_DIR/RECOMP_BUILD_ROOT for the kit's suites
 ```
 
-Expected: PASS (existing translator tests unchanged).
+Expected: PASS, two more tests than before (86 passed, 3 skipped).
 
 - [ ] **Step 6: Point the game config at the found entry and extend the config test**
 
