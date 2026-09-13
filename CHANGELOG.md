@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Re-pin the kit to `pharaoh` 0310124: allow desktop app, smoke and headless
+  builds and `--regenerate` on Linux and Windows; only the iOS packager
+  requires macOS, including stub builds. Native Linux and Windows builds
+  and gameplay remain unverified for this game.
 - Exclude undecoded `BINKS` cinematics from the iOS bundle, reducing this
   installation's staged game files from 745.282 to 605.360 MiB. Keep the
   executable, model files, audio and maps. Document the iPad build/install
