@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Re-pin the kit with `GetDeviceCaps` reading the DirectDraw mode,
+  `GetTextExtentPointA` sharing the fixed text metrics, and `SetBkColor`
+  returning the previous per-DC color (initially white). All 10 new runtime
+  checks pass with the same 32 known failures; DirectDraw checks pass.
 - Re-pin the kit with ten user32 window-state and message shims, including
   client-area work bounds, recorded pointer position, tick-clock message time
   and a scheduler checkpoint for `WaitMessage`. All 11 new runtime checks

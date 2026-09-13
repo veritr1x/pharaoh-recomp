@@ -149,6 +149,57 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-13: Task 2.5 implements the three gdi32 gaps
+
+Kit commit `17b31a0` implements `GetDeviceCaps`, `GetTextExtentPointA` and
+`SetBkColor` with their 2-, 4- and 2-argument stdcall arities. The caps shim
+reads the existing `g_mode_w/h/bpp` state through the new
+`ddraw_display_mode` accessor; without a linked DX module its weak runtime
+definition returns false and leaves the 640x480x8 fallback intact. The
+declaration in `runtime/win32.h` lets the runtime suite use the same hook
+without linking DX. This follows the kit's existing weak hook pattern;
+`GetSystemPaletteEntries` itself is only a no-host-palette stub, and user32
+gets display geometry through host-fed window records.
+
+The text extent uses the same named constants as `GetTextMetricsA`:
+7 pixels per character and 16 pixels high. Background color lives in the
+existing per-DC state, initially white. `TextOutA` still draws nothing;
+there is no new font contract or `gdi32.h`.
+
+- `.venv/bin/python tools/test.py --compile-only` exited **0** for the
+  baseline, test-first and final builds. Their compiler warning counts were
+  **0 / 16 / 5**, with **0** compiler errors. The final five warnings are
+  existing volatile-increment warnings in the runtime suite.
+- `.venv/bin/ctest --test-dir build/cmake/macos -R runtime_tests
+  --output-on-failure` reported **501 checks / 32 failures** at baseline,
+  **521 / 51** before implementation, then **511 / 32**. All three exited
+  **8**, with **0/1** suites passing. All **10** new check messages now
+  report `[ok]`, and all ten new stack-cleanup failures are gone. A read-only
+  log comparison confirmed the same 32 baseline failures; the import
+  coverage failure now counts **60** unknown arities instead of **63**.
+- `.venv/bin/python kit/tools/test.py --game-dir
+  /Users/sattam.thakur/Documents/Tests/pharaoh-recomp/kit/games/stub
+  --compile-only` exited **0** before and after implementation, with
+  **16 / 5** compiler warnings and **0** errors. DirectDraw runs used this
+  stub tree, not the game's translation.
+- `.venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests
+  --output-on-failure` first exited **8**, **137,710 checks / 67 failures**;
+  finally it exited **0**, **137,774 checks / 0 failures**, **1/1** passing.
+  The added mode checks cover the default, 800x600x8, 3840x2160x16 and a
+  refused mode leaving the accepted mode and GDI caps unchanged. The
+  post-run log assertion initially assumed the red run's check total;
+  correcting that assumption to the observed final total passed, exit **0**.
+- `.venv/bin/python kit/tools/format.py --write` exited **0**, formatting
+  **237** files with changes confined to task files. From `kit/`,
+  `../.venv/bin/python -m pytest -q tests/test_game_literals.py` passed
+  **3** tests, exit **0**. `.venv/bin/python -m pytest -q tests` passed
+  **4** tests, exit **0**. The kit's `tools/check_game_literals.py`,
+  staged `tools/check_repo.py`, whitespace checks and ignored-log checks
+  all exited **0**.
+- Logs remain under ignored `build/task-2.5-*.log`. No game-host run,
+  regeneration, other-platform build or push was performed. These checks
+  establish shim behavior; menu and gameplay remain unverified.
+
 #### 2026-09-13: Task 2.4 implements the ten user32 gaps
 
 Kit commit `d39439a` registers `GetMenu`, `IsIconic`, `OpenIcon`,
