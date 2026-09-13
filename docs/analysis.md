@@ -152,6 +152,167 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-14: Task 4.1 reaches Nubt; menu save/reload remains untested
+
+Started on clean game `main` `6d5264c` and clean kit `pharaoh`
+`2fe5c5dcd967286138820338dd1cb71975aa0314`, already the submodule pin.
+Used the existing smoke binary. Read-only Python/pefile assertions exited
+**0**: the executable matches the pinned SHA-256, image base and entry
+point, and generated `x86.h` matches `kit/runtime/x86.h`. No kit changes,
+re-pin, native build, regeneration or landing-checkout work was performed.
+
+**Steps 1 and 2 reach an advancing city. Step 3 is incomplete:** no Escape,
+Save-menu confirmation or restart/Load was attempted before the requested
+eight-round limit. The files observed below are automatic saves, not proof
+of a menu save or reload. The script and this record are committed as partial
+Task 4.1 work.
+
+`smoke/first-mission.script` uses guest coordinates at 640x480. Its final
+path is title centre `(320,240)` → Play `(320,112)` → name `pyn` using
+`key P/Y/N down/up` and Return → Begin Family History `(320,140)` →
+Predynastic Begin **arrow** `(612,452)` → Nubt's To the city arrow
+`(593,439)` → Housing and Roads checkmark `(611,452)` → city.
+The parser's real `host_script_dik` table supports P, Y and N but not A;
+100 ms key holds and release waits delivered the name correctly.
+
+Rounds 1–3 used the default `build/recomp/profile`. Round 2 created
+`Save/pyn.dat`, so round 3 reopened the Family Registry and could not replay
+name entry. Preserved that file and used a separate, initially absent
+profile under `build/recomp/profile/task-4.1-round-N` for each round 4–8.
+README documents running the final script with a fresh profile; it does
+not select or overwrite an existing family's saves.
+
+Each round used this smoke command with `N` replaced by its round number:
+
+```sh
+RECOMP_SCRIPT=$PWD/smoke/first-mission.script \
+RECOMP_HOST_DUMP_DIR=build/smoke/task-4.1-round-N \
+RECOMP_DDRAW_MODES=640x480x16 RECOMP_SMOKE_DRAWABLE=1024x768 \
+RECOMP_MAX_SECONDS=150 build/recomp/pop_smoke > build/task-4.1-round-N.log 2>&1
+```
+
+For rounds 4–8 it also set
+`RECOMP_PROFILE_DIR=$PWD/build/recomp/profile/task-4.1-round-N`.
+Each script version is retained in its dump directory as `script.script`.
+The current smoke host does **not** read `RECOMP_MAX_SECONDS`: its
+`BootOptions` deadline is 180 seconds with 20 seconds' grace. The requested
+variable was supplied on all eight runs; each finished through the script's
+end and guest `ExitProcess(0)`, before either limit.
+
+| Round | Added or corrected input; observed final screen | Exit | Elapsed | Completed steps | Presented frames (changed from previous) | Dumps |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Play → Enter a family name | **0** | **23.0 s** | **5/5** | **478 (4)** | **3** |
+| 2 | P/Y/N and Return → pyn family menu | **0** | **27.8 s** | **15/15** | **574 (5)** | **5** |
+| 3 | `(320,140)` after the replayed name keys → Family Registry; persisted family changed the entry flow | **0** | **32.8 s** | **17/17** | **674 (4)** | **6** |
+| 4 | Same script, fresh profile → Predynastic Period | **0** | **32.8 s** | **17/17** | **673 (6)** | **6** |
+| 5 | Begin text `(445,451)` → unchanged Predynastic screen | **0** | **37.8 s** | **19/19** | **772 (6)** | **7** |
+| 6 | Replace text click with Begin arrow `(612,452)` → Nubt briefing | **0** | **37.8 s** | **19/19** | **781 (9)** | **7** |
+| 7 | To the city `(593,439)` → Housing and Roads tutorial, including all three provisionally named city captures | **0** | **69.8 s** | **23/23** | **1420 (11)** | **10** |
+| 8 | Tutorial checkmark `(611,452)` → city, followed by timed captures | **0** | **71.8 s** | **25/25** | **7055 (3273)** | **11** |
+
+Read every complete run log. All report **640x480 16bpp**, **no
+undeliverable calls**, guest exit **0**, and `all expectations met`.
+That last line is not a gameplay assertion: this script has no `expect`
+commands. No unknown-arity/unimplemented import or guest fault is logged.
+The existing diagnostics remain:
+
+```text
+[recomp] boot: the mod loader reported a failure
+[recomp] ddraw: RECOMP_DDRAW_MODES offers 1 mode instead of the built-in list; SetDisplayMode accepts the same set
+[recomp] gdi: TextOutA is accepted and not drawn in this runtime
+[recomp] AdjustWindowRectEx: no non-client area is modelled
+```
+
+The following DirectDraw line also warns that the offered list omits
+640x480x8; every observed selected mode is 640x480x16. No new blocking kit
+gap was established. The high smoke audio-play counts do not establish
+music output, for the streaming-callback limitation recorded in Task 3.2.
+
+Every dump was converted with the actual filename convention:
+
+```sh
+.venv/bin/python kit/tools/recomp/ppm_to_png.py \
+  build/smoke/task-4.1-round-N/smoke_NAME_present.ppm \
+  build/smoke/task-4.1-round-N/smoke_NAME_present.png
+```
+
+**55 conversions, all exit 0, all 640x480.** Read-only Pillow checks exited
+**0**: all 55 PNGs match their PPMs pixel-for-pixel. New screens were viewed
+directly; repeated captures were checked against the inspected images.
+Every PNG path is `build/smoke/task-4.1-round-N/smoke_NAME_present.png`,
+with the following complete inventory and readings:
+
+| `NAME` | `N` | Reading |
+| --- | --- | --- |
+| `title-screen` | 1–8 | Cleopatra portrait, gold title, Click to Start. |
+| `main-menu` | 1–8 | Throne room and five orange buttons, Play at `(320,112)`. |
+| `after-play` | 1–2, 4–8 | Enter a family name; empty text field. |
+| `after-play` | 3 | Family Registry with `pyn`, Create/Delete/Proceed controls. |
+| `family-name` | 2, 4–8 | Name field contains `pyn`. |
+| `family-name` | 3 | Unchanged Family Registry. |
+| `after-family-name` | 2, 4–8 | pyn family menu; Begin Family History at `(320,140)`. |
+| `after-family-name` | 3 | Unchanged Family Registry. |
+| `after-begin-family-history` | 3 | Family Registry, still no campaign transition. |
+| `after-begin-family-history` | 4–8 | Predynastic Period selected; description and Begin arrow at lower right. |
+| `after-predynastic-begin` | 5 | Same Predynastic screen; clicking the text had no visible effect. |
+| `after-predynastic-begin` | 6–8 | Nubt, A Village is Born; objective 6 Meager Shanties, difficulty Normal, To the city arrow. |
+| `city-entry`, `city-10s`, `city-30s` | 7 | Identical Housing and Roads tutorial pages, not city evidence. |
+| `housing-and-roads` | 8 | Housing/road instructions and illustration, lower-right checkmark. |
+| `city-entry` | 8 | Terrain, roaming animals, right-hand building controls/minimap; population 0, February 3500 BC. |
+| `city-10s` | 8 | Animals in different positions; July 3500 BC; Game saved notification. |
+| `city-30s` | 8 | Animals have moved again; February 3499 BC; Game saved and Flood will be mediocre notifications. |
+
+The final script waits two seconds after the tutorial checkmark for
+`city-entry`, then ten seconds for `city-10s`, then twenty more for
+`city-30s` (41.8, 51.8 and 71.8 seconds into the script). These are host
+waits, not simulated calendar seconds. It builds no housing; **human
+workers/immigrants remain unverified**. Animal movement and date advancement
+establish that the city simulation runs.
+
+Copied the final two PPMs byte-for-byte to the task's requested comparison
+paths (`build/smoke/city-10s.ppm` and `city-30s.ppm`; copy/assertions exit
+**0**), then ran exactly:
+
+```sh
+.venv/bin/python kit/tools/recomp/compare_frames.py build/smoke/city-10s.ppm build/smoke/city-30s.ppm
+```
+
+Exit **1**, output **`mean 2.139 max 255 outliers 3.15% (> 24) over
+640x480`**. This tool tests similarity, so exit 1 means its default
+similarity bounds were exceeded; the task expects movement. An additional
+Pillow count found **9,919 / 307,200 pixels changed (3.228841%)**. Changes
+include notifications/date text as well as the visibly moving animals;
+the full-frame fraction is not exclusively a walker metric.
+
+At the eight-round limit, ran the requested file check without extending
+the script or starting another host:
+
+```sh
+find build/recomp/profile -iname '*.sav' -newer smoke/first-mission.script
+```
+
+Exit **0**, exactly **two** results:
+
+- `build/recomp/profile/task-4.1-round-8/Save/pyn/autosave_history.sav`
+  (**308,196 bytes**).
+- `build/recomp/profile/task-4.1-round-8/Save/pyn/autosave_replay.sav`
+  (**308,064 bytes**).
+
+Round 7 also left an older `autosave_replay.sav` in its own profile.
+These files and the Game saved notifications prove automatic writes under
+the profile. **Menu Save, confirmation, restart/Load and settings changes
+remain undone.** No manual-save command was added without testing it.
+
+Final read-only artifact/log checks exited **0**: all eight logs complete,
+all repeated final screens match inspected references, the original
+`Pharaoh.ini` content and timestamp are unchanged, and there are **zero**
+new save/settings files (`.sav`, `.dat`, `.ini`, `.jas`) under
+`original/gog/app`. Existing files were preserved. All **163** checked task
+artifacts/profile files are ignored. Game and kit whitespace checks and
+the staged four-file scope check passed. No portable/native suite was
+rerun for this script/documentation-only task; no interactive app,
+other-platform run, kit commit or push was performed.
+
 #### 2026-09-14: land Phase 2-3 on kit main (Task 3.3)
 
 Started on clean game main `baad47b`, clean kit `pharaoh`

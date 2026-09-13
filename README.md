@@ -34,7 +34,7 @@ cinematics are Bink and Smacker video. The Bink shim returns a finished
 video record to skip decoding; Smacker still refuses to open a video.
 The measurements are in [docs/analysis.md](docs/analysis.md).
 
-## Status: title screen, main menu, effects and music on macOS
+## Status: macOS smoke bring-up
 
 `smoke/main-menu.script` captures the 640x480 Cleopatra title screen with
 “Click to Start”, clicks its centre, and captures the five-button main menu
@@ -44,8 +44,16 @@ are identical. The 21-second smoke run presents 438 frames and exits through
 run records the title-screen click at peak 0.782. In the headless host, the
 title-screen MP3 capture contains 24.092 seconds of audio, 23.8 seconds
 non-silent, with no logged underrun. The smoke host lacks streaming
-callbacks, so music output is verified in headless only. Menu-button
-selection, gameplay and the interactive macOS app remain unverified.
+callbacks, so music output is verified in headless only.
+
+`smoke/first-mission.script` enters a new family name, starts the Predynastic
+campaign, opens the Nubt briefing and dismisses the housing tutorial. Its
+two timed city captures show moving animals and an advancing date. The
+eight-round run record, every screen's capture path and the remaining
+limits are in [docs/analysis.md](docs/analysis.md). The game created profile
+autosaves; **saving through the menu and reloading remain unverified**.
+Housing construction, human walkers and the interactive macOS app are also
+unverified.
 
 The kit is pinned to landed main `2fe5c5d` and includes Miles shims (41
 imports), Bink and Smacker shims (19 imports), and the 15 missing user32,
@@ -79,6 +87,27 @@ setup exports listings from a curated annotation set, and none exists for
 this executable, so this script runs Ghidra's analyzers instead. Outputs
 (the translation, the apps, the logs) live under ignored `build/`; the game
 lives in ignored `original/` and the Ghidra listings in ignored `analysis/`.
+
+To run the campaign smoke after preparing and translating the game:
+
+```sh
+.venv/bin/python tools/build.py --target smoke --jobs 8
+mkdir -p build/recomp/profile
+smoke_profile=$(mktemp -d "$PWD/build/recomp/profile/first-mission.XXXXXX")
+RECOMP_PROFILE_DIR="$smoke_profile" \
+RECOMP_SCRIPT="$PWD/smoke/first-mission.script" \
+RECOMP_HOST_DUMP_DIR=build/smoke/first-mission \
+RECOMP_DDRAW_MODES=640x480x16 RECOMP_SMOKE_DRAWABLE=1024x768 \
+RECOMP_MAX_SECONDS=150 build/recomp/pop_smoke
+```
+
+Use a fresh profile each time: an existing family opens the Family Registry
+instead of name entry. Keep the profile to retain the game's files. Dumps
+are named `smoke_<name>_present.ppm`, including `smoke_city-10s_present.ppm`
+and `smoke_city-30s_present.ppm`. The script ends after those captures and
+does not test menu saving or loading. The current smoke host ignores
+`RECOMP_MAX_SECONDS`; its own deadline is 180 seconds plus grace, and the
+verified script finished in 71.8 seconds.
 
 ## Play on an iPad
 

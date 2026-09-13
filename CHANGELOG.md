@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add `smoke/first-mission.script` for a fresh profile: enter family `pyn`,
+  begin the Predynastic campaign, continue through Nubt's briefing and
+  dismiss the housing tutorial. The eighth smoke round reaches the city;
+  timed captures show moving animals and the date advancing, with 3.23%
+  of pixels changed. Profile autosaves are present. Stop at the requested
+  eight-round limit; saving through the menu, reloading, housing construction
+  and human walkers remain unverified. No kit change or re-pin.
 - Land the Phase 2-3 kit work on kit main `2fe5c5d` and retain that exact
   submodule pin. Record the full verification: 88 portable tests passed,
   3 skipped, 4 game config tests passed, all 11 native `nogame` entries

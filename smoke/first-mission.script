@@ -1,0 +1,46 @@
+# Campaign-entry smoke, extended one screen at a time from inspected dumps.
+# Requires a fresh RECOMP_PROFILE_DIR: an existing family opens the registry.
+# Coordinates are guest pixels at 640x480.
+wait 15000
+dump title-screen
+click left 320 240
+wait 4000
+dump main-menu
+click left 320 112
+wait 4000
+dump after-play
+# P, Y and N are letter names supported by the smoke parser.
+key P down
+wait 100
+key P up
+wait 100
+key Y down
+wait 100
+key Y up
+wait 100
+key N down
+wait 100
+key N up
+wait 200
+dump family-name
+key RETURN down
+wait 100
+key RETURN up
+wait 4000
+dump after-family-name
+click left 320 140
+wait 5000
+dump after-begin-family-history
+click left 612 452
+wait 5000
+dump after-predynastic-begin
+click left 593 439
+wait 2000
+dump housing-and-roads
+click left 611 452
+wait 2000
+dump city-entry
+wait 10000
+dump city-10s
+wait 20000
+dump city-30s
