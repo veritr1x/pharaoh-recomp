@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Re-pin the kit to `pharaoh` 4c95977: stage desktop app builds under
+  `build/package` as a Linux folder and architecture-named tarball or a
+  Windows folder, with notices, host resources and `RECOMP_EXE` launch
+  instructions. Packaging tests use fake binaries on macOS; native Linux
+  and Windows builds and gameplay remain unverified.
 - Re-pin the kit to `pharaoh` 0310124: allow desktop app, smoke and headless
   builds and `--regenerate` on Linux and Windows; only the iOS packager
   requires macOS, including stub builds. Native Linux and Windows builds
