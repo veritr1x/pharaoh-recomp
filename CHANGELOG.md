@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Re-pin the kit with silent, stack-safe shims for all 41 Miles Sound System
+  imports: startup succeeds, handles are refused and status calls report done.
+  Native arity checks pass; the headless probe still stops at its watchdog
+  after seven uniform frames, with Miles call reachability unconfirmed.
 - Start the heap arena at 20 MB (`[game] heap_base = 0x01400000`) and
   re-pin the kit with per-game heap configuration. The loader now accepts
   the image ending at `0x0126d000`; headless presents seven uniform frames

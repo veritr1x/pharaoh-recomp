@@ -149,6 +149,68 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-13: Task 2.1 registers all 41 Miles imports; headless still stalls
+
+Resumed at Step 3 on game main `4e29b23` and kit branch `pharaoh` at
+`ddfcb7a`, retaining the existing uncommitted `test_mss32_arities` and
+`imports_argc` changes. Steps 1 and 2 and the confirmed red state were
+supplied by the preceding run; they were not repeated here. Kit commit
+`543daf9` adds the arity table and its registration/build wiring, and
+includes those retained tests and the trampoline-arity accessor.
+
+- Read-only `pefile` and SHA-256 assertions exited **0**: the executable
+  matches the pinned hash, image base and entry point. Its **41** Miles
+  import names and decorated arities exactly match all **41** shim entries
+  and all **41** entries in the existing test. Startup returns 1; sample
+  and stream handles return 0; all three status calls return 2. Provider
+  enumeration returns 0 and opening a 3D provider returns 1, as specified
+  by the task's table. These shims do not produce sound.
+- `.venv/bin/python kit/tools/format.py --write` exited **0**, formatting
+  **236** handwritten files; only the task's files changed.
+- `.venv/bin/python kit/tools/test.py --game-dir
+  /Users/sattam.thakur/Documents/Tests/pharaoh-recomp/kit/games/stub
+  --compile-only` exited **0**. Native suites were built against the kit's
+  stub game, without this game's translation. Full output is in ignored
+  `build/task-2.1-native-build.log`: **6** compiler warning diagnostics,
+  **0** compiler errors, and no warning from `mss32.cpp`.
+- `.venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests
+  --output-on-failure` exited **0**: **1/1** CTest suites passed,
+  **137,644 checks, 0 failures**, including `Miles arities`.
+- From `kit/`, `../.venv/bin/python -m pytest -q
+  tests/test_game_literals.py` exited **0**: **3 passed**.
+  `.venv/bin/python kit/tools/check_game_literals.py`, the staged kit's
+  `.venv/bin/python kit/tools/check_repo.py` and Git whitespace checks
+  also exited **0**.
+- `.venv/bin/python tools/build.py --target headless --jobs 8` exited
+  **0**, rebuilding and linking `build/recomp/pop_headless` with **0**
+  compiler warnings and **0** compiler errors. Full output is in ignored
+  `build/task-2.1-headless-build.log`. No translation or `x86.h` changed;
+  regeneration was not performed.
+- Ran exactly `RECOMP_MAX_SECONDS=10 build/recomp/pop_headless >
+  build/headless-3.log 2>&1`. The host exited **4** at **40.1 seconds**:
+  the watchdog adds a 30-second grace to the requested cap. The image
+  loaded and DirectDraw presented **7 uniform frames**, **1 written**,
+  at **640x480 16bpp**. No menu or gameplay is established.
+- **No `mss32` or `_AIL_` line appears in this run's log. Actual Miles
+  call reachability is unconfirmed:** the requested command enables
+  neither verbose import tracing nor import statistics, and the new
+  shims return silently. The abnormal-exit import report is conditional
+  on `recomp_env("IMPORT_STATS")` in `host/boot.cpp`; no
+  `build/recomp/run-report.json` was produced. No extra instrumented run
+  was performed.
+- First distinct diagnostics, in log order: mod-loader failure;
+  `USER32.dll!FindWindowA` unimplemented and unknown-arity warnings;
+  the same pair for `GDI32.dll!GetDeviceCaps`,
+  `GDI32.dll!GetTextExtentPointA` and `GDI32.dll!SetBkColor`;
+  `gdi: TextOutA is accepted and not drawn in this runtime`;
+  `watchdog: 40s elapsed with no response`; and the notice that the
+  watchdog ended the run before mod teardown. Each unknown-arity warning
+  says `not adjusting ESP, the guest stack will drift if it is really
+  stdcall`. There are **12** distinct warning/diagnostic lines. Read-only
+  log assertions exited **0**. These findings were not fixed or diagnosed
+  further. Runtime-suite execution, smoke execution and other-platform
+  builds were not performed.
+
 #### 2026-09-13: Task 1.4 compiles; headless boot blocked by the loader
 
 Initial build: game main `324cb37`, kit branch `pharaoh` at `969f027` (the existing
