@@ -153,6 +153,156 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-14: Task 5.1 iOS bundle, install and automated first boot
+
+Started on clean game `main` `210d53ab3eca40877803ec3ba1847c2260913c6d`
+and clean kit `pharaoh` `2fe5c5dcd967286138820338dd1cb71975aa0314`,
+already pinned here. No kit source, touch setting, address, translation or
+submodule pin changed. The kit supplies `[touch] keypad = "auto"` by
+default; no touch adjustment was made without device-play evidence.
+
+**Step 1.** Used `.venv/bin/python` with `importlib.util` to load
+`kit/tools/stage_game_files.py`, `tomli` to read `game.toml`, and the real
+`excluded(relative, patterns)` helper to sum file sizes below
+`original/gog/app`. Both measurements exited **0**:
+
+| Bundle selection | Files | Bytes | MiB | Snippet's integer MB output |
+| --- | --- | --- | --- | --- |
+| Original exclusions | 1,311 | 781,484,469 | 745.282 | 745 |
+| Also exclude `BINKS` | 1,304 | 634,766,385 | 605.360 | 605 |
+
+The measured original size supersedes the plan's approximate 760 MB.
+Seven undecoded cinematics account for **146,718,084 bytes / 139.921 MiB**.
+Added `BINKS` to `[bundle].exclude` and the exclusion test's required
+patterns; moved `BINKS/High/intro_big.bik` into its dropped-path cases.
+Setup still requires the complete original installation including `BINKS`.
+The executable, model text, graphics, audio and maps remain included.
+This is a source-file sum, not an installed-app or seeded-directory size.
+
+The post-change Python check also verified the pinned executable's SHA-256,
+image base **0x00400000**, entry **0x00562fea**, and byte-identical
+generated/kit `x86.h`: exit **0**. No regeneration was needed.
+`.venv/bin/python -m pytest -q tests` exited **0**, **4 passed**;
+`.venv/bin/python -m pytest -q kit/tests/test_game_literals.py` exited
+**0**, **3 passed**. Full test output remains under ignored
+`build/task-5.1-config-tests.log` and `build/task-5.1-game-literals.log`.
+
+**Step 2.** `xcrun devicectl list devices` exited **0** and listed
+**15A75531-8976-580D-AF09-5DAA939FDF32** as **available (paired)**,
+an **iPad Pro 11-inch (M4), iPad16,3**. Ran the adapted build once:
+
+```sh
+set -o pipefail
+.venv/bin/python tools/build.py --target ios --team BDFW2Z27HA \
+  --device 15A75531-8976-580D-AF09-5DAA939FDF32 --console --no-install \
+  2>&1 | tee build/ios-1.log | tail -30
+```
+
+Captured zsh `pipestatus` immediately: **1 / 0 / 0** for build, `tee`
+and `tail`. Read the complete log. CMake reports both compiler identities
+as unknown, then at `CMakeLists.txt:2 (project)`:
+
+```text
+No CMAKE_C_COMPILER could be found.
+No CMAKE_CXX_COMPILER could be found.
+```
+
+That shell failed before compilation, signing or staging. **Environment
+note:** the orchestrator identified a compiler probe targeting
+`arm64-apple-macos17.0` with the macOS SDK: something in that shell's
+environment overrides the iOS sysroot. This is not recorded as a kit bug;
+the particular override remains unidentified. The orchestrator then built,
+installed and launched from another shell, supplying ignored
+`build/ios-2.log` and `build/ios-console-1.log` for this resumed write-up.
+The build/install/console sequence is:
+
+```sh
+set -o pipefail
+.venv/bin/python tools/build.py --target ios --team BDFW2Z27HA \
+  --device 15A75531-8976-580D-AF09-5DAA939FDF32 --console --no-install \
+  2>&1 | tee build/ios-2.log | tail -30
+xcrun devicectl device install app \
+  --device 15A75531-8976-580D-AF09-5DAA939FDF32 \
+  build/ios/Release/PharaohRecomp.app
+perl -e 'alarm 100; exec @ARGV' xcrun devicectl device process launch \
+  --device 15A75531-8976-580D-AF09-5DAA939FDF32 --terminate-existing \
+  --console dev.recompkit.pharaoh > build/ios-console-1.log 2>&1
+```
+
+`build/ios-2.log` records AppleClang **21.0.0.21000101**, the
+**iPhoneOS26.5 SDK**, `arm64-apple-ios17.0`, eight build jobs and
+`** BUILD SUCCEEDED **`, followed by **build exit 0**. The app is
+**`build/ios/Release/PharaohRecomp.app`**, bundle size **`626M`** as
+reported in that log. The staging line copies **1,304 files** from
+`original/gog/app` into that app's `game/` directory. `devicectl` reports
+**App installed**, bundle ID **`dev.recompkit.pharaoh`**, and **install
+exit 0**. This is app-bundle evidence; the device's seeded-directory size
+was not measured.
+
+`build/ios-console-1.log` records a successful application launch and:
+
+- **Game path/seeding:**
+  `/var/mobile/Containers/Data/Application/BEB2C1ED-3C90-43E3-9322-359599B38926/Documents/game/Pharaoh.exe`,
+  entry **`00562fea`**. There are no explicit seeding-success, stamp or
+  copy-count lines and no seeding/path failure. The path confirms use of
+  `Documents/game`; the console does not distinguish a fresh copy from
+  reuse. The stager writes the executable hash to `.stamp`; the iOS host
+  copies when the executable is absent or the stamp differs and logs copy
+  failures, not successful stamps or sizes.
+- **Display:** `GPU backend: metal`; window **1210x834 points**, **2420x1668
+  pixels**, focus yes; presenter drawable **2420x1668**, at most **3**
+  submissions in flight. `[host] display mode 640x480 16bpp` appears
+  **three times**.
+- **Surfaces:** `OutputDebugString` initially reports `Front Surface Ptr:
+  15e0e90` and `Back Surface Ptr: 1676e90`, then twice `Front Surface Ptr:
+  1705e10` and `Back Surface Ptr: 179be10`. All three sets report
+  `Front Buffer: 1404e30` and `Back Buffer:  1404e40`.
+- **Audio:** the host logs its original-gain mixing/clipping policy, then
+  `audio device running: mixer 48000 Hz stereo, device 48000 Hz 2 ch, 1024
+  frames`. The first buffer is channel **0**, **44100 Hz**, **2 ch**,
+  **1152 frames**, peak **0.000**, volume **0.79**, rendered at **48000 Hz**
+  to the output device. It then reports `audio channel 0 is a stream now,
+  continuing from byte 0`. Sink reports at **1,408**, **2,815** and **4,222
+  pulls** each have **0 late (>1.5 periods), 0 starved**, max gap **21.5
+  ms**, max render **0.1 ms**, period **21.3 ms**, ahead **2,048 frames**.
+  This verifies streaming activity and sink service, not audible or
+  non-silent music; no listening check was recorded. The separate MIDI warning is
+  `no SoundFont was found, so the music is accepted and not heard`.
+- **Other diagnostics:** `boot: the mod loader reported a failure`,
+  `gdi: TextOutA is accepted and not drawn in this runtime`,
+  `AdjustWindowRectEx: no non-client area is modelled`, and UIKit
+  unbalanced appearance-transition warnings. No repair was attempted.
+
+The presenter reports this fault before the audio-device/stream lines:
+
+```text
+presenter: FAULT: drawable acknowledgement exceeded queue grace; using command completion fallback (unique=0 drops=4 flight=1 mailbox=0)
+```
+
+The capture continues through the three audio sink reports. Its final
+`App terminated due to signal 14.` is the orchestrator's **100-second
+Perl alarm**, not an application fault. `build/ios-2.log` records **launch
+exit 1** for that timed console command; it is not a clean guest-exit
+result. The presenter fallback fault above is a separate runtime finding.
+There is no screen capture proving the title or main menu was displayed.
+
+**Step 3: playing on the iPad by hand was not performed.** Nothing was
+touched by hand: title/menu taps, Begin Family History, keypad name entry,
+reaching the city, house building, holding each edge to scroll and
+long-pressing a building remain unverified. README gives the commands and
+this by-hand checklist; no touch fix or `input_touch_tests` case was added.
+
+**Step 4: resumed write-up and commit.** Re-ran
+`.venv/bin/python -m pytest -q tests`: **4 passed, exit 0**.
+Output is in ignored `build/task-5.1-resume-config-tests.log`.
+`git diff --check` exited **0**. The scoped game commit contains
+`game.toml`, `tests/test_game_config.py`, `README.md`, `docs/analysis.md`
+and `CHANGELOG.md`. Native suites, another device run and other platforms
+were not run during this resume. No kit commit, re-pin, landing-checkout
+change or push; kit remains **`2fe5c5dcd967286138820338dd1cb71975aa0314`**.
+Game inputs, saves, generated files and build logs remain local and
+uncommitted.
+
 #### 2026-09-14: Task 4.2 automated macOS title capture and frame pacing
 
 Started on clean game `main` `88197ea` and clean kit `pharaoh`

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Exclude undecoded `BINKS` cinematics from the iOS bundle, reducing this
+  installation's staged game files from 745.282 to 605.360 MiB. Keep the
+  executable, model files, audio and maps. Document the iPad build/install
+  commands and manual touch checks. Record Task 5.1's successful 626M app
+  build/install and automated launch with 640x480 16-bpp mode and channel 0
+  streaming (zero reported starvation), plus the presenter fallback fault.
+  The 100-second timer ends the capture; menu visibility, audible music and
+  touch play remain unverified.
 - Document how to launch and manually check the macOS app. Task 4.2's
   automated captures show the title before and after an attempted click;
   quitting faults after guest exit 0. Measure 20.10 new frames/s over a

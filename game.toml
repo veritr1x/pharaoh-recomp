@@ -82,8 +82,8 @@ required_dirs = ["AUDIO", "BINKS", "Data", "Maps"]
 [bundle]
 # Left out of the iOS bundle: GOG's support files, the Windows-only DLLs
 # (Miles Sound System, Bink, Smacker, GOG Galaxy, the Games Explorer helper),
-# the Miles provider plug-ins, the manuals and the readme. The game's model
-# files are .txt and stay in.
-exclude = ["__support", "webcache.zip", "Readme.txt",
+# the Miles provider plug-ins, the manuals, the readme and Bink cinematics
+# (no decoder plays them). The game's model files are .txt and stay in.
+exclude = ["__support", "webcache.zip", "Readme.txt", "BINKS",
            "*.dll", "*.DLL", "*.pdf", "*.ico", "*.hashdb", "*.info",
            "*.M3D", "*.ASI", "*.tsk"]

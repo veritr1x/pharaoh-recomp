@@ -129,10 +129,59 @@ in [docs/analysis.md](docs/analysis.md).
 
 ## Play on an iPad
 
-Not yet verified on iPad. The kit's
-`tools/build.py --target ios` builds, signs and installs `PharaohRecomp.app`
-with the game minus `[bundle].exclude` in `game.toml` (GOG's support files,
-the Windows DLLs, the Miles plug-ins, the manuals).
+After completing the preparation and translation steps above, use Xcode
+with the iOS SDK, a developer team and a paired iPad running iPadOS 17 or
+later. From this checkout, build without installing, then install and
+launch separately. These are the commands for the development iPad; replace
+the team and device identifiers for your own device:
+
+```sh
+xcrun devicectl list devices
+set -o pipefail
+.venv/bin/python tools/build.py --target ios --team BDFW2Z27HA \
+  --device 15A75531-8976-580D-AF09-5DAA939FDF32 --console --no-install \
+  2>&1 | tee build/ios-2.log | tail -30
+```
+
+Only after the build succeeds:
+
+```sh
+xcrun devicectl device install app \
+  --device 15A75531-8976-580D-AF09-5DAA939FDF32 \
+  build/ios/Release/PharaohRecomp.app
+perl -e 'alarm 100; exec @ARGV' xcrun devicectl device process launch \
+  --device 15A75531-8976-580D-AF09-5DAA939FDF32 --terminate-existing \
+  --console dev.recompkit.pharaoh > build/ios-console-1.log 2>&1
+```
+
+The alarm bounds the console capture to 100 seconds; the recorded
+`App terminated due to signal 14` is that timer, not an app fault. For hand
+play, open the installed app from the iPad Home Screen. The bundle excludes GOG support
+files, Windows DLLs, Miles plug-ins, manuals and `BINKS` cinematics (there
+is no decoder). The current installation contributes **605 MiB** of game
+files. The host copies the bundled game into writable `Documents/game`
+when its executable or stamp is missing or the stamp differs; it replaces
+that directory on a stamp change, so retain a copy of any saves before
+updating to a different executable.
+
+For a manual check, tap **Click to Start**, **Play Pharaoh/Cleopatra**,
+then create a new family (choose **Create** if the Family Registry appears).
+Use the on-screen keypad to enter a name and press Return, choose
+**Begin Family History**, select **Predynastic Period** and its **Begin**
+arrow, then enter **Nubt** using **To the city** and dismiss the housing
+tutorial. The default keypad mode is `auto`, visible without a hardware
+keyboard; its tabs collapse or expand each half. Try building houses,
+holding a finger at each screen edge to scroll, and long-pressing a building
+for its right-click information panel. Check that music plays and record
+which actions work.
+
+Task 5.1's automated install and launch are recorded in the
+[run log](docs/analysis.md), including the presenter fallback fault.
+Nothing was touched by hand: the displayed title/main menu, audible music
+and the checklist above remain unverified. The first shell's compiler probe
+used `arm64-apple-macos17.0` and the macOS SDK despite the iOS target; the
+orchestrator built successfully from another shell. This is an environment
+note, not a kit bug.
 
 ## Check a change
 

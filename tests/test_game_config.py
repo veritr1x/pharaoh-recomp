@@ -69,18 +69,18 @@ class PharaohConfigTests(unittest.TestCase):
         self.assertEqual(self.cfg["translate"]["volatile_reads"], [])
 
     def test_bundle_exclusions_and_setup(self):
-        for pattern in ("__support", "*.dll", "*.DLL", "*.pdf", "*.M3D", "webcache.zip"):
+        for pattern in ("__support", "*.dll", "*.DLL", "*.pdf", "*.M3D", "webcache.zip", "BINKS"):
             self.assertIn(pattern, self.cfg["bundle"]["exclude"])
         stage = load_module("stage_game_files")
         exclude = self.cfg["bundle"]["exclude"]
         # The executable, the data and the game's .txt model files stay in.
         for kept in ("Pharaoh.exe", "Pharaoh.ini", "Figure_model.txt", "Pharaoh_Text.eng",
-                     "Data/Pharaoh_General.sg3", "AUDIO/Music/Egypt.mp3", "BINKS/high/intro_big.bik",
+                     "Data/Pharaoh_General.sg3", "AUDIO/Music/Egypt.mp3",
                      "Maps/Alexandria.map"):
             self.assertFalse(stage.excluded(Path(kept), exclude), kept)
         for dropped in ("mss32.dll", "BINKW32.DLL", "SMACKW32.DLL", "MSSEAX.M3D", "MP3DEC.ASI", "mssb16.tsk",
                         "goggame-1207659046.hashdb", "goggame-1207659046.info", "cleoicon.ico",
-                        "Pharaoh - manual.pdf", "Readme.txt", "webcache.zip"):
+                        "Pharaoh - manual.pdf", "Readme.txt", "webcache.zip", "BINKS/High/intro_big.bik"):
             self.assertTrue(stage.excluded(Path(dropped), exclude), dropped)
         self.assertEqual(self.cfg["setup"]["required_dirs"], ["AUDIO", "BINKS", "Data", "Maps"])
         self.assertNotIn("annotations_url", self.cfg["setup"])
