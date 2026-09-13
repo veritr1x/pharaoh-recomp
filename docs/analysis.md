@@ -149,6 +149,128 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-14: MP3 streams through Miles (Task 3.2)
+
+Started from game main `c4e846b` and kit `pharaoh` `f4ae821`, both clean.
+Kit commit `2fe5c5dcd967286138820338dd1cb71975aa0314` extracts `Mp3Source`
+from DirectShow and implements Miles stream open/start/close/status, volume
+and loop counts. The stream owns the encoded bytes and a shared audio
+channel. It resolves paths through `win32_host_path_op(..., WIN32_FILE_READ)`,
+converts the first host play to a stream, retains refused PCM chunks, and
+refills while the appended queue has less than one second of audio.
+`mss32_frame_pump` is registered beside `qmixer_frame_pump`, services samples
+as well as streams, and ignores a null CPU. Decoder EOF does not report
+Miles status 2 until submitted audio has played out. Tracked changes are
+limited to the audio shims, decoder, tests, build list, documentation and
+submodule pin; no runtime, translator, addresses or host implementation changed.
+
+The fixture already exists: `kit/dx/tests/fixtures/tone_mp3.h` contains a
+3,179-byte synthetic stereo MP3. The regression writes it under a temporary
+`Music/Test.mp3` and opens `music\test.mp3`, using the same `win32_init`
+mapping as DirectShow. No private fixture or optional developer-data skip
+was needed. Real test helpers are `sc`, `gm_put_str`, and `&g_cpu`.
+
+Verification, in order (full outputs remain in ignored `build/task-3.2-*`):
+
+- Native build command, used before the red run, after extraction, after
+  stream implementation and after final formatting:
+
+  ```sh
+  .venv/bin/python kit/tools/test.py --game-dir /Users/sattam.thakur/Documents/Tests/pharaoh-recomp/kit/games/stub --compile-only
+  ```
+
+  All four completed builds exited **0**. An initial authoring attempt
+  exited **1** because the new test supplied a nonexistent mode argument to
+  `os_mkdir`; corrected to its actual one-argument signature before the red
+  run. This was not the expected regression failure. Final build: **1**
+  existing `stalls` unused-variable warning, **0** errors.
+- `.venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests
+  --output-on-failure`: the red run exited **8**, **138,427 checks, 4
+  failures**, all in `Miles streams` (open, play, stream conversion and
+  playing status). After decoder extraction it again exited **8** with the
+  same count and failures; both DirectShow tests stayed **ok**. After stream
+  implementation it exited **0**, **1/1** suite passed. After extending
+  coverage and formatting, the final run exited **0**, **1/1** suite passed,
+  **138,479 checks, 0 failures**. Coverage includes null pumps, queue refusal
+  and retry, format and total PCM bytes, decoder EOF versus playback EOF,
+  rewind, volume/clamping, two plays, infinite looping, the one-second refill
+  threshold, close, and a missing file.
+- `.venv/bin/python kit/tools/format.py --write`: **0**, **241** handwritten
+  files formatted. The corresponding `kit/tools/format.py` check: **0**,
+  **241** files checked. Only scoped files changed.
+- `.venv/bin/python -m pytest -q kit/tests/test_game_literals.py
+  tests/test_game_config.py`: **0**, **7 passed**.
+  `.venv/bin/python kit/tools/check_game_literals.py`: **0**.
+  From `kit/`, `../.venv/bin/python tools/check_repo.py` on staged changes:
+  **0**, source boundaries and documentation links passed. Kit staged Git
+  whitespace check: **0**.
+- A read-only Python identity check: **0**; SHA-256
+  `b21b7d719491bb45dfb324ba95231a5b0960ab25fea1bf3fb21da65da7eca662`,
+  base `0x00400000`, entry `0x00562fea`, all matched.
+- After committing the kit, rebuilt **both** hosts in order:
+
+  ```sh
+  .venv/bin/python tools/build.py --target smoke --jobs 8
+  .venv/bin/python tools/build.py --target headless --jobs 8
+  ```
+
+  Both exited **0** and linked. Smoke build: **5** existing C-linkage
+  return-type warnings, **0** errors; headless build: **0** warnings,
+  **0** errors. Neither `x86.h` nor translation changed, so no regeneration
+  was necessary.
+
+Ran the prescribed headless capture with the requested display mode:
+
+```sh
+RECOMP_HOST_AUDIO_CAPTURE=build/audio-menu.wav RECOMP_MAX_SECONDS=30 RECOMP_DDRAW_MODES=640x480x16 build/recomp/pop_headless > build/headless-audio.log 2>&1
+.venv/bin/python -c "import wave;w=wave.open('build/audio-menu.wav');print(w.getnframes()/w.getframerate(),'s')"
+```
+
+Both commands exited **0**. The duration command printed **24.0919375 s**:
+**1,156,413 frames**, stereo 48 kHz, 16-bit PCM. A separate read-only Python
+waveform measurement exited **0** and found absolute peak **24,632/32,768 =
+0.751708984375**, with nonzero sound in every one-second capture block. Its
+metrics are in ignored `build/task-3.2-audio-metrics.json`. The host reports
+**23.8 s non-silent**, longest unbroken stretch **23.74 s**, **0
+discontinuities**, one **330 ms** silence at the beginning with a voice
+playing and a **10 ms** short dropout. There are **0** `underrun` or
+`stream ran dry` diagnostics and **0** stream-open failures. Thus no failed
+path or case-missing file was observed; successful paths were not traced.
+This is the title-screen run: headless cannot click through to the menu.
+The captured waveform establishes audio output; subjective listening was
+not performed.
+
+The duration differs from 30 seconds because the unchanged default frame
+cap is **500**: the log explicitly says `frame cap reached, WM_CLOSE posted
+(500 frames, 24.1s)`, followed by guest `ExitProcess(0)`. It presents **500**
+frames (**50** written), 640x480x16, and releases its one audio channel.
+`RECOMP_FRAMES` was not set; it is a directory switch, not a frame count.
+No extra run or cap change was made. The known mod-loader, omitted 8-bit
+mode, undrawn text and non-client-area diagnostics remain.
+
+Then ran the existing smoke script:
+
+```sh
+RECOMP_SCRIPT=$PWD/smoke/main-menu.script RECOMP_HOST_DUMP_DIR=build/smoke RECOMP_DDRAW_MODES=640x480x16 RECOMP_SMOKE_DRAWABLE=1024x768 RECOMP_MAX_SECONDS=40 build/recomp/pop_smoke > build/task-3.2-smoke.log 2>&1
+```
+
+Exit **0**, **21.0 s**, **4/4** script steps, **438** presented frames,
+**3** dumps, `all expectations met`, no undeliverable calls. Exact audio
+line:
+
+```text
+audio:              22976 plays, loudest sample 0.782
+```
+
+This large count is **not music playback proof**. The smoke host counts
+`host_audio_play` calls but has no stream/queue callbacks; its linked
+`host_audio_stream` default returns **-1**, which leaves Miles status done
+and permits repeated starts. The headless capture above is the streaming
+output evidence. No smoke-host fallback or callback implementation was
+added in this task. Game-backed `runtime_tests`, other platforms, longer
+playback, audible main-menu music and gameplay were not tested. Neither
+repository was pushed; landing on kit main remains outside Task 3.2.
+
 #### 2026-09-14: sound effects through Miles (Task 3.1)
 
 Kit `pharaoh` f4ae821: `dx/riff.cpp` parses a PCM RIFF WAVE image in guest

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Re-pin the kit to `pharaoh` 2fe5c5d: Miles MP3 streams share DirectShow's
+  decoder and refill through the frame pump, with volume, loop counts and
+  playback completion. The macOS headless title run captures 24.092 seconds
+  (23.8 seconds non-silent), peak 0.752, with no logged underrun. The default
+  500-frame cap ends the run before 30 seconds. The smoke script passes,
+  but its host has no streaming callbacks and does not validate music.
 - Sound effects play: the kit's Miles Sound System shims (kit `pharaoh`
   f4ae821) load WAV files into guest memory, parse them and play sample
   handles through the host mixer with Miles volume and pan; the smoke run of
