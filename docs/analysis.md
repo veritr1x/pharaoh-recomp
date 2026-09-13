@@ -153,6 +153,58 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-14: Task 6.3 Linux and Windows CI and instructions only
+
+Steps 1 and 2 were explicitly deferred: this Mac has no Linux or Windows
+machine with the game. **Neither native Linux nor native Windows
+builds, packages or gameplay have been run yet.** No smoke comparison,
+Vulkan window, first-mission play, GPU/driver record or Vulkan validation
+result exists for either platform from this task.
+
+Step 3 adds `windows-2025` to `.github/workflows/checks.yml`, retaining
+`macos-15` and `ubuntu-24.04`. Windows enters the Visual Studio developer
+environment with `ilammy/msvc-dev-cmd@v1`, following the kit's CI for the
+runner's clang/lld toolchain. All three entries run the same portable kit
+tests, game config tests and `tools/build.py --stub`; the Windows entry
+uses `.venv/Scripts/python` under Bash. The existing Linux clang/lld
+installation and macOS-only iOS stub step remain. This workflow change
+has not been run on GitHub Actions.
+
+Step 4 adds [Build on Linux](../README.md#build-on-linux) and
+[Build on Windows](../README.md#build-on-windows) with the task's setup,
+analysis and build sequence. The Linux apt packages match the kit's CI.
+Source inspection of `kit/tools/build.py` and
+`kit/tools/package_desktop.py` corrects the plan's launch paths: both
+platforms stage under `build/package/PharaohRecomp/`, and Linux also writes
+`build/package/PharaohRecomp-linux-<arch>.tar.gz`. The generated package
+README uses `RECOMP_EXE` pointing to `Pharaoh.exe`, whose parent supplies
+the game data root; no game files are packaged. A separate `--target smoke`
+build is included for Linux because the default app target does not build
+`pop_smoke` on a clean checkout.
+
+When machines become available, compare matching first-mission smoke dumps
+against macOS using `kit/tools/recomp/compare_frames.py` with fresh profiles
+and matching display settings. Only small timing differences are expected,
+not yet measured. Verify the interactive Vulkan window and first-mission
+play, record the GPU and driver, and collect `RECOMP_GPU_VALIDATE=1` output
+(including validation-layer availability). On Windows, check guest `\`
+paths against host separators during game-data lookup and save/load; any
+confirmed failure belongs in kit `platform/os_win32.cpp` with a
+`platform_tests` case. No platform fix is attempted here.
+
+Local verification on this Mac (these checks do not run the game):
+
+| Command | Actual result |
+| --- | --- |
+| `.venv/bin/python -m pip install pyyaml` | Exit 0; installed PyYAML 6.0.3 after the initial YAML parse reported `ModuleNotFoundError: No module named 'yaml'`. |
+| `.venv/bin/python -c "import yaml,sys; yaml.safe_load(open(\".github/workflows/checks.yml\"))"` | Exit 0 after installation; workflow YAML parses. |
+| `.venv/bin/python tools/test.py` | Exit 0; 101 passed, 3 skipped in 6.48 s. |
+| `.venv/bin/python -m pytest -q tests` | Exit 0; 4 passed in 0.01 s. |
+| `.venv/bin/python tools/build.py --stub` | Exit 0; configured `build/cmake/macos-stub` and linked `build/stub/PharaohRecomp.app`. Existing kit keypad/presenter C-linkage warnings were emitted. |
+
+The kit remains unchanged on `pharaoh` at
+`4c95977c201c7a1710c9fab051121ee459f3149d`; no re-pin is needed.
+
 #### 2026-09-14: Task 5.1 iOS bundle, install and automated first boot
 
 Started on clean game `main` `210d53ab3eca40877803ec3ba1847c2260913c6d`

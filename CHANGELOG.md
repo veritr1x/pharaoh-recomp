@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add a `windows-2025` CI entry for portable tests and the stub build,
+  retaining macOS and Linux. Document Linux and Windows build commands,
+  the kit CI's Linux dependencies, `build/package` output and `RECOMP_EXE`.
+  Neither native Linux nor Windows builds, packages or gameplay have been
+  run yet; the new CI entry is also unrun. Future runs must record Vulkan
+  validation with `RECOMP_GPU_VALIDATE=1` and check Windows path separators.
 - Re-pin the kit to `pharaoh` 4c95977: stage desktop app builds under
   `build/package` as a Linux folder and architecture-named tarball or a
   Windows folder, with notices, host resources and `RECOMP_EXE` launch

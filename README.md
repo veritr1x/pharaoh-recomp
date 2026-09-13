@@ -110,6 +110,90 @@ does not test menu saving or loading. The current smoke host ignores
 `RECOMP_MAX_SECONDS`; its own deadline is 180 seconds plus grace, and the
 verified script finished in 71.8 seconds.
 
+## Build on Linux
+
+**Not run yet:** neither the native Linux build/package nor the game has
+been run on Linux. Task 6.3's Linux run is deferred because the development
+Mac has no Linux machine or VM with the game. CI checks portable tests and
+a stub build without game code; it does not establish gameplay.
+
+Start in a recursive checkout with your supported game installation copied
+to `original/gog/app`. Install Python with venv support, Ghidra 12.1.3 and
+a compatible JDK as described in [CONTRIBUTING.md](CONTRIBUTING.md).
+The Ubuntu packages below match the kit's CI:
+
+```sh
+sudo apt-get update -qq
+sudo apt-get install -y -qq clang lld build-essential pkg-config libasound2-dev \
+  libpulse-dev libaudio-dev libjack-dev libsndio-dev libx11-dev libxext-dev \
+  libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
+  libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev \
+  libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev libudev-dev \
+  libpipewire-0.3-dev libwayland-dev libdecor-0-dev liburing-dev \
+  mesa-vulkan-drivers glslc
+python3 -m venv .venv && .venv/bin/python -m pip install -r kit/requirements-dev.txt
+.venv/bin/python tools/setup.py --install original/gog/app --link-only
+.venv/bin/python tools/analyze.py --ghidra-home /path/to/ghidra_12.1.3_PUBLIC
+.venv/bin/python tools/build.py --regenerate --jobs 8
+.venv/bin/python tools/build.py --target smoke --jobs 8
+RECOMP_SCRIPT=$PWD/smoke/first-mission.script RECOMP_HOST_DUMP_DIR=build/smoke build/recomp/pop_smoke
+RECOMP_EXE="$PWD/original/gog/app/Pharaoh.exe" RECOMP_GPU_VALIDATE=1 \
+  build/package/PharaohRecomp/PharaohRecomp
+```
+
+The separate smoke build is needed on a clean checkout: the default build
+target builds only the app. Use a fresh profile and the same display
+settings as the macOS campaign smoke above when comparing captures.
+Compare matching dumps with `kit/tools/recomp/compare_frames.py`; the
+expected result is only small timing differences, still unverified.
+Check that the app opens a Vulkan window and reaches and plays the first
+mission. Record the GPU/driver and validation output with
+`RECOMP_GPU_VALIDATE=1`, including whether validation layers were available.
+
+The packager writes `build/package/PharaohRecomp/` and
+`build/package/PharaohRecomp-linux-<arch>.tar.gz` (`x86_64` or `aarch64`).
+This is the current output directory, replacing the plan's
+`build/linux/PharaohRecomp/`. As its generated `README.txt` explains,
+`RECOMP_EXE` names the original **executable**, not a directory; its parent
+is the game data root. The package contains no game files. Keep
+`resources/` beside the app and keep the original executable with its data.
+
+## Build on Windows
+
+**Not run yet:** neither the native Windows build/package nor the game has
+been run on Windows. Task 6.3's Windows run is deferred because no Windows
+machine with the game is available. The new `windows-2025` CI entry runs
+portable tests and a stub build; it has not been run yet.
+
+Start in a recursive checkout with the supported installation copied to
+`original\gog\app`, Python, Ghidra 12.1.3 and a compatible JDK. Run these
+commands in a Visual Studio developer PowerShell with clang and lld on
+`PATH`:
+
+```powershell
+py -3 -m venv .venv; .venv\Scripts\python -m pip install -r kit\requirements-dev.txt
+.venv\Scripts\python tools\setup.py --install original\gog\app --link-only
+.venv\Scripts\python tools\analyze.py --ghidra-home C:\path\to\ghidra_12.1.3_PUBLIC
+.venv\Scripts\python tools\build.py --regenerate --jobs 8
+$env:RECOMP_EXE = (Resolve-Path original\gog\app\Pharaoh.exe).Path
+$env:RECOMP_GPU_VALIDATE = "1"
+build\package\PharaohRecomp\PharaohRecomp.exe
+```
+
+The packager writes `build\package\PharaohRecomp\`, replacing the plan's
+`build\windows\PharaohRecomp\`. Its `README.txt` also shows how to launch
+from the package folder with `$env:RECOMP_EXE` set to the full path to your
+original `Pharaoh.exe`. Keep it in the installation with all its data
+directories; the package includes no game files. Keep `resources\` beside
+the app.
+
+Check the same Vulkan window, first mission and capture agreement as on
+Linux, and record the GPU/driver and `RECOMP_GPU_VALIDATE=1` output. Watch
+for guest paths containing `\` being handled against the host's own path
+separator, especially game-data lookup and save/load. A confirmed separator
+failure needs a kit `platform/os_win32.cpp` fix with a `platform_tests`
+regression case; none has been observed or fixed in this task.
+
 ## Play on macOS
 
 After completing the build steps above, launch from this checkout with
