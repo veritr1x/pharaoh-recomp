@@ -149,6 +149,25 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-13: Task 2.3a gates profile_tests; runtime_tests baseline recorded
+
+The kit defines `profile_tests` only when the translation's `funcs.h`
+defines `FN_00500040`, allowing this game's native test binaries to build.
+Resumed at Step 4 with the gate and kit changelog already edited; the
+following verification results were supplied by the preceding run and
+were not rerun during this documentation-and-commit step.
+
+- `.venv/bin/python tools/test.py --compile-only`: the game tree compiles.
+- `.venv/bin/ctest --test-dir build/cmake/macos -R runtime_tests
+  --output-on-failure`: **493 checks, 39 failures**. Of these, **32** are
+  the pre-existing Populous-bound baseline: **11** loader expectations,
+  **10** `VCONFIG0` file checks, **1** `IsBadCodePtr` bounds check,
+  **8** native frame-cap waits, **1** guest-root resolver and **1** import
+  coverage check reporting **75 unknown arities**. The other **7** failures
+  belong to the uncommitted Task 2.3 checks in
+  `kit/runtime/tests/runtime_tests.cpp`; those edits remain untouched and
+  excluded from this task's commits. This is not a passing runtime suite.
+
 #### 2026-09-13: Task 2.2 adds Bink and Smacker failure stubs
 
 Kit commit `df96987` registers the 12 Bink and 7 Smacker exports with
