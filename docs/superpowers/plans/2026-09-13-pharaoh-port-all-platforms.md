@@ -1086,26 +1086,34 @@ cd kit && git add runtime/user32.cpp runtime/tests/runtime_tests.cpp && git comm
 - Test: `kit/runtime/tests/runtime_tests.cpp` (`test_gdi_and_com(X86 *c)`, line ~1146; use its existing `hdc`, or obtain one the way it does)
 
 **Interfaces:**
-- Produces: `GetDeviceCaps(hdc, index)`: `HORZRES` (8) and `VERTRES` (10) = the current display mode, `BITSPIXEL` (12) = its depth, `PLANES` (14) = 1, `RASTERCAPS` (38) = `RC_PALETTE` (0x100) only when depth is 8, `SIZEPALETTE` (104) = 256 when depth is 8 else 0, `NUMCOLORS` (24) = 256 when depth 8 else -1, other indices 0. `GetTextExtentPointA(hdc, str, n, &size)`: size = (n * glyph_w, glyph_h) from the font the kit's `TextOutA` draws with, returns 1. `SetBkColor(hdc, color)` stores the colour for `TextOutA`'s opaque background and returns the previous value (`CLR_INVALID` 0xffffffff the first time is wrong; the default is white 0x00ffffff).
+- Produces: `GetDeviceCaps(hdc, index)`: `HORZRES` (8) and `VERTRES` (10) = the current DirectDraw display mode, `BITSPIXEL` (12) = its depth (read through the accessor `dx/ddraw.cpp` keeps for `SetDisplayMode`'s result; if none is exported, add `bool ddraw_display_mode(uint32_t *w, uint32_t *h, uint32_t *bpp)` to `dx/ddraw.h`, false before any mode is set, in which case answer 640, 480, 8), `PLANES` (14) = 1, `RASTERCAPS` (38) = `RC_PALETTE` (0x100) only when depth is 8, `SIZEPALETTE` (104) = 256 when depth is 8 else 0, `NUMCOLORS` (24) = 256 when depth 8 else -1, other indices 0. `GetTextExtentPointA(hdc, str, n, &size)`: the kit's `TextOutA` draws nothing (it logs and returns 1), so the extent agrees with `GetTextMetricsA`'s fixed metrics: size = (n * 7 `tmAveCharWidth`, 16 `tmHeight`), returns 1; lift those two numbers into named constants shared by both shims. `SetBkColor(hdc, color)` stores the colour for `TextOutA`'s opaque background and returns the previous value (`CLR_INVALID` 0xffffffff the first time is wrong; the default is white 0x00ffffff).
 
 - [ ] **Step 1: Write the failing test**
 
 ```cpp
-    check(call_import(c, "GDI32.dll", "GetDeviceCaps", {hdc, 8}) == 640 &&
-              call_import(c, "GDI32.dll", "GetDeviceCaps", {hdc, 10}) == 480,
+    // The mode this test has set by this point (or the 640x480x8 default
+    // before any SetDisplayMode): read it the way the shim does and compare.
+    uint32_t mw = 640, mh = 480, mbpp = 8;
+    ddraw_display_mode(&mw, &mh, &mbpp);
+    check(call_import(c, "GDI32.dll", "GetDeviceCaps", {hdc, 8}) == mw &&
+              call_import(c, "GDI32.dll", "GetDeviceCaps", {hdc, 10}) == mh,
           "GetDeviceCaps HORZRES/VERTRES are the mode");
-    check(call_import(c, "GDI32.dll", "GetDeviceCaps", {hdc, 12}) == 16, "BITSPIXEL");
+    check(call_import(c, "GDI32.dll", "GetDeviceCaps", {hdc, 12}) == mbpp, "BITSPIXEL is the mode's depth");
     check(call_import(c, "GDI32.dll", "GetDeviceCaps", {hdc, 14}) == 1, "PLANES");
-    check(call_import(c, "GDI32.dll", "GetDeviceCaps", {hdc, 38}) == 0, "RASTERCAPS has no palette at 16 bpp");
+    check(call_import(c, "GDI32.dll", "GetDeviceCaps", {hdc, 38}) == (mbpp == 8 ? 0x100u : 0u),
+          "RASTERCAPS has RC_PALETTE only at 8 bpp");
+    check(call_import(c, "GDI32.dll", "GetDeviceCaps", {hdc, 0x2000}) == 0, "an unknown index is 0");
     uint32_t sz = scratch_block(8), text = put_str("ABCDEFG");  // any 7-character string; never a game name in kit code
+    uint32_t tm = scratch_block(56);
+    call_import(c, "GDI32.dll", "GetTextMetricsA", {hdc, tm});
     check(call_import(c, "GDI32.dll", "GetTextExtentPointA", {hdc, text, 7, sz}) == 1 &&
-              rd32(sz) == 7 * gdi_glyph_width() && rd32(sz + 4) == gdi_glyph_height(),
-          "GetTextExtentPointA measures with TextOutA's font");
+              rd32(sz) == 7 * rd32(tm + 20) && rd32(sz + 4) == rd32(tm + 0),
+          "GetTextExtentPointA agrees with GetTextMetricsA (tmAveCharWidth, tmHeight)");
     check(call_import(c, "GDI32.dll", "SetBkColor", {hdc, 0x00ff0000}) == 0x00ffffff, "SetBkColor returns white first");
     check(call_import(c, "GDI32.dll", "SetBkColor", {hdc, 0}) == 0x00ff0000, "then the previous colour");
 ```
 
-`gdi_glyph_width()`/`gdi_glyph_height()`: expose the constants `TextOutA` uses (grep `TextOutA` in `gdi32.cpp` for the glyph cell) through `gdi32.h` for the test. The test string must not name a game in kit code; use `"ABCDEFG"`.
+If `runtime_tests.cpp` cannot see `ddraw_display_mode` (the runtime tests link `recomp_runtime` only), read the mode in the test through whatever the gdi32 shim itself calls, and add that declaration to `runtime/win32.h` rather than linking `dx` into the test.
 
 - [ ] **Step 2: Run to verify failure**, **Step 3: Implement** following the interface above (a `static uint32_t g_bk_color = 0x00ffffff;` per DC is enough; the kit has one DC), **Step 4: Test, format, commit**:
 
