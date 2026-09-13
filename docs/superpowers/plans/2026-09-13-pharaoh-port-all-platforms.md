@@ -256,41 +256,22 @@ git add docs/analysis.md && git commit -m "analysis: the function behind the 004
 
 - [ ] **Step 1: Write the failing tests**
 
-`kit/tools/recomp/tests/test_translate_config.py`:
+`kit/tools/recomp/tests/test_translate_config.py` already exists and loads
+`game_config` and `translate` at module level; `configure()` needs a fully
+loaded config (`listings_path`, `developer_exe_path`), so build it from the
+stub game. Add to the existing test class:
 
 ```python
-"""[translate].entry_points seeds function discovery."""
-import importlib.util
-from pathlib import Path
-import unittest
-
-ROOT = Path(__file__).resolve().parents[3]
-
-
-def load_translate():
-    spec = importlib.util.spec_from_file_location("translate", ROOT / "tools/recomp/translate.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-class EntryPointConfigTests(unittest.TestCase):
     def test_entry_points_default_empty(self):
-        translate = load_translate()
-        cfg = {"dir": ROOT / "games/stub", "translate": {"animation_counter": 0x500000}}
+        cfg = game_config.load(ROOT / "games/stub")
         translate.configure(cfg)
         self.assertEqual(translate.EXTRA_ENTRY_POINTS, frozenset())
 
     def test_entry_points_read(self):
-        translate = load_translate()
-        cfg = {"dir": ROOT / "games/stub",
-               "translate": {"animation_counter": 0x500000, "entry_points": [0x4ab000, 0x4ac000]}}
+        cfg = game_config.load(ROOT / "games/stub")
+        cfg["translate"]["entry_points"] = [0x4ab000, 0x4ac000]
         translate.configure(cfg)
         self.assertEqual(translate.EXTRA_ENTRY_POINTS, frozenset({0x4ab000, 0x4ac000}))
-
-
-if __name__ == "__main__":
-    unittest.main()
 ```
 
 - [ ] **Step 2: Run to verify failure**
