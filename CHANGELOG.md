@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Re-pin the kit with `GetDiskFreeSpaceA` reporting 4 GB free of 8 GB and
+  `GetSystemDirectoryA` returning `C:\WINDOWS\SYSTEM` or the required buffer
+  size. Both imports preserve the guest stack; all four new runtime checks
+  pass, leaving the 32 known failures tied to the suite's other game.
 - Re-pin the kit with 19 Bink and Smacker video stubs: opening a video
   returns 0, BinkGetError returns "no video decoder", and each export has
   its decorated stdcall arity. Native checks pass; cinematic skipping in

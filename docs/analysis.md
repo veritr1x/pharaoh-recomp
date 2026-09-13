@@ -149,6 +149,38 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-13: Task 2.3 implements the two kernel32 gaps
+
+Kit commit `99e8784` implements `GetDiskFreeSpaceA` with 8 sectors per
+cluster, 512 bytes per sector, `0x00100000` free clusters and `0x00200000`
+total clusters. `GetSystemDirectoryA` writes `C:\WINDOWS\SYSTEM` and returns
+17, or returns the required size 18 when the buffer is too small. The shim
+table records their 5- and 2-argument stdcall arities.
+
+- Resumed with the four Step 1 checks already uncommitted. Ran
+  `.venv/bin/python tools/test.py --compile-only` before and after
+  implementation: both exited **0**, with **5** existing volatile-increment
+  warnings in `runtime_tests.cpp` each and no compiler errors.
+- `.venv/bin/ctest --test-dir build/cmake/macos -R runtime_tests
+  --output-on-failure` ran against this game's tree before and after the
+  change. Before: **493 checks, 39 failures**. After: **490 checks,
+  32 failures**. Both CTest runs exited **8**, with **0/1** suites passing.
+  All four task check messages now report `[ok]`; the three ESP failures
+  are gone (those conditional failure checks also account for the lower
+  check count). A read-only log comparison exited **0**, confirming the
+  same 32 baseline failures remain; the import-coverage failure now reports
+  **73** unknown arities instead of **75**. This is not a passing suite.
+- `.venv/bin/python kit/tools/format.py --write` exited **0**, formatting
+  **237** handwritten files with changes confined to the task's two files.
+  From `kit/`, `../.venv/bin/python -m pytest -q tests/test_game_literals.py`
+  exited **0**: **3 passed**. `.venv/bin/python -m pytest -q tests` exited
+  **0**: **4 passed**. `.venv/bin/python kit/tools/check_game_literals.py`,
+  `.venv/bin/python kit/tools/check_repo.py` on staged kit changes, and
+  `git -C kit diff --cached --check` each exited **0**.
+- CTest logs and the post-change build log remain under ignored
+  `build/task-2.3-*.log`. No game-host run, regeneration or other-platform
+  build was performed; this verifies shim behavior, not gameplay.
+
 #### 2026-09-13: Task 2.3a gates profile_tests; runtime_tests baseline recorded
 
 The kit defines `profile_tests` only when the translation's `funcs.h`
