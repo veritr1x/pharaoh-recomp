@@ -26,7 +26,14 @@
   .venv/bin/ctest --test-dir kit/build/cmake/macos -R "dx_tests|runtime_tests" --output-on-failure
   ```
 
-  (`--compile-only` builds every test binary into `kit/build/cmake/macos`; `-R` picks the suite.)
+  (`--compile-only` builds every test binary into `kit/build/cmake/macos`; `-R` picks the suite.) That covers `dx_tests` and the other `nogame` suites. `runtime_tests` is game-backed (it loads the developer's image and exits early without one), so it runs against THIS game's tree instead, after Task 2.3a makes that tree's test binaries compile:
+
+  ```bash
+  .venv/bin/python tools/test.py --compile-only            # this game's tree: build/cmake/macos
+  .venv/bin/ctest --test-dir build/cmake/macos -R runtime_tests --output-on-failure | tail -40
+  ```
+
+  Some of its existing checks are Populous-bound and fail under any other game; record the failure count before adding checks and judge a change by your own check messages passing and the count not growing.
 - The generated tree `build/recomp/gen/` carries a copy of `runtime/x86.h` taken at regeneration time; after a kit change to `x86.h`, run `tools/build.py --regenerate` before trusting a host build.
 - Commit messages: imperative subject, a body that says what changed and why. Kit commits go on branch `pharaoh` in `kit/`; game commits go on `main` of the game repository and re-pin the submodule.
 - Minimum platforms (kit decision): iOS 17, Android 10 with Vulkan 1.1, macOS 14, current Linux and Windows releases SDL3 supports.
@@ -840,6 +847,66 @@ BinkOpen and SmackOpen return 0 with a readable BinkGetError, so a game
 skips its cinematics instead of calling into a decoder that is not there."
 ```
 
+### Task 2.3a: `profile_tests` builds only when the translation defines its target
+
+**Why:** `kit/runtime/tests/profile_tests.cpp` calls `FN_00500040` (a function of the kit's first game) through `funcs.h`, so under any other game's translation `tools/test.py --compile-only` fails at that file and no native test binary gets built. The block that defines it (`kit/runtime/CMakeLists.txt`, inside `if(POP_REAL_GEN AND NOT IOS)`) must skip the target when `${POP_GEN_DIR}/funcs.h` does not define that function. `funcs.h` exists at configure time (the stub translation is produced by `execute_process`).
+
+**Files:**
+- Modify: `kit/runtime/CMakeLists.txt:52-61`
+- Modify: `kit/CHANGELOG.md`
+
+- [ ] **Step 1: Reproduce**
+
+```bash
+.venv/bin/python tools/test.py --compile-only 2>&1 | grep -E "error:|FAILED" | head -3
+```
+
+Expected: `error: use of undeclared identifier 'FIDX_00500040'` in `profile_tests.cpp`.
+
+- [ ] **Step 2: Gate the target**
+
+Replace the `add_executable(profile_tests ...)` block with:
+
+```cmake
+  # The profile suite drives one translated function by address; it exists
+  # only for a translation that has it.
+  file(STRINGS ${POP_GEN_DIR}/funcs.h POP_PROFILE_TARGET REGEX "define FN_00500040")
+  if(POP_PROFILE_TARGET)
+    add_executable(profile_tests tests/profile_tests.cpp)
+    target_link_libraries(profile_tests PRIVATE recomp_platform recomp_runtime recomp_dx_null)
+    target_compile_options(profile_tests PRIVATE ${POP_WARN_HOST})
+    pop_optimize(profile_tests 1)
+    pop_link_gen(profile_tests)
+    pop_test_binary(profile_tests)
+    add_test(NAME profile_tests_disabled COMMAND profile_tests disabled WORKING_DIRECTORY ${POP_ROOT})
+    set_tests_properties(profile_tests_disabled PROPERTIES LABELS game ENVIRONMENT RECOMP_PROFILE=0)
+    add_test(NAME profile_tests_enabled COMMAND profile_tests enabled WORKING_DIRECTORY ${POP_ROOT})
+    set_tests_properties(profile_tests_enabled PROPERTIES LABELS game ENVIRONMENT RECOMP_PROFILE=1)
+  else()
+    message(STATUS "profile_tests: the translation has no FN_00500040; suite not defined")
+  endif()
+```
+
+- [ ] **Step 3: Verify both trees**
+
+```bash
+.venv/bin/python tools/test.py --compile-only 2>&1 | tail -2          # this game: builds now
+.venv/bin/ctest --test-dir build/cmake/macos -R runtime_tests --output-on-failure | tail -12   # record the baseline failure count
+.venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only 2>&1 | tail -2   # the stub still configures
+```
+
+Expected: the game tree compiles every test binary; `runtime_tests` runs (its Populous-bound failures are the baseline, write the number into the run log); the stub tree is unaffected.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd kit && git add runtime/CMakeLists.txt CHANGELOG.md && git commit -m "profile_tests exists only for a translation that defines its target function
+
+Under another game's translation the suite did not compile and took every
+native test binary with it."
+cd .. && git add kit docs/analysis.md && git commit -m "Native test binaries build against this game; runtime_tests baseline recorded"
+```
+
 ### Task 2.3: kernel32 gaps: `GetDiskFreeSpaceA`, `GetSystemDirectoryA`
 
 **Files:**
@@ -873,7 +940,7 @@ In `runtime_tests.cpp`, at the end of `test_misc_shims(X86 *c)` (line ~1006; it 
 - [ ] **Step 2: Run to verify failure**
 
 ```bash
-.venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir kit/build/cmake/macos -R runtime_tests --output-on-failure | tail -5
+.venv/bin/python tools/test.py --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir build/cmake/macos -R runtime_tests --output-on-failure | grep -E "GetDiskFreeSpaceA|GetSystemDirectoryA|checks|failures|passed|failed" | tail -8
 ```
 
 Expected: FAIL on `GetDiskFreeSpaceA succeeds` (the logging stub returns 0).
@@ -910,7 +977,7 @@ Table entries: `{"KERNEL32.dll", "GetDiskFreeSpaceA", 5, k_GetDiskFreeSpaceA}`, 
 - [ ] **Step 4: Run tests, commit**
 
 ```bash
-.venv/bin/python kit/tools/format.py --write && .venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir kit/build/cmake/macos -R runtime_tests --output-on-failure | tail -3
+.venv/bin/python kit/tools/format.py --write && .venv/bin/python tools/test.py --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir build/cmake/macos -R runtime_tests --output-on-failure | grep -E "FAIL|checks|failures|passed|failed" | tail -12
 cd kit && git add runtime/kernel32.cpp runtime/tests/runtime_tests.cpp && git commit -m "kernel32: GetDiskFreeSpaceA and GetSystemDirectoryA"
 ```
 
@@ -1008,7 +1075,7 @@ Replace `host_client_size`, `cursor_position`, `tick_count_ms` with the real hel
 - [ ] **Step 4: Test and commit**
 
 ```bash
-.venv/bin/python kit/tools/format.py --write && .venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir kit/build/cmake/macos -R runtime_tests --output-on-failure | tail -3
+.venv/bin/python kit/tools/format.py --write && .venv/bin/python tools/test.py --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir build/cmake/macos -R runtime_tests --output-on-failure | grep -E "FAIL|checks|failures|passed|failed" | tail -12
 cd kit && git add runtime/user32.cpp runtime/tests/runtime_tests.cpp && git commit -m "user32: window state and message-position shims a 2000-era game polls"
 ```
 
