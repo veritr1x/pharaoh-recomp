@@ -36,6 +36,10 @@ globals = "globals.toml"
 # has been audited. Sentinel, and no reads are rewritten.
 animation_counter = 0x0126ce00
 volatile_reads = []
+# Function entries the Ghidra listing lacks. 0x004a98b0 is the routine
+# holding the two-level switch at 0x004ab2af, reached only through a
+# pointer; see docs/analysis.md.
+entry_points = [0x004a98b0]
 
 [hooks]
 # Every address here is a sentinel until the listings say otherwise.

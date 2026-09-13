@@ -35,6 +35,9 @@ class PharaohConfigTests(unittest.TestCase):
                          "b21b7d719491bb45dfb324ba95231a5b0960ab25fea1bf3fb21da65da7eca662")
         self.assertEqual(self.cfg["game"]["entry_point"], 0x00562FEA)
         self.assertEqual(self.cfg["game"]["image_base"], 0x00400000)
+        self.assertEqual(self.cfg["translate"]["entry_points"], [0x004a98b0])
+        for address in self.cfg["translate"]["entry_points"]:
+            self.assertTrue(0x00401000 <= address < 0x0056e24d, hex(address))  # inside .text
         self.assertIn('#define RECOMP_APP_NAME "PharaohRecomp"', self.header)
         self.assertIn('#define RECOMP_EXECUTABLE "Pharaoh.exe"', self.header)
         self.assertIn('#define RECOMP_GUEST_ROOT "C:\\\\GOG Games\\\\Pharaoh Gold"', self.header)
