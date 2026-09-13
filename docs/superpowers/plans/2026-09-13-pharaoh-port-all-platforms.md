@@ -851,11 +851,11 @@ skips its cinematics instead of calling into a decoder that is not there."
 
 - [ ] **Step 1: Write the failing test**
 
-In `runtime_tests.cpp`, inside the kernel32 test function that already exercises `GetVolumeInformationA` (find it with `grep -n GetVolumeInformationA runtime/tests/runtime_tests.cpp`):
+In `runtime_tests.cpp`, at the end of `test_misc_shims(X86 *c)` (line ~1006; it already calls kernel32 imports). Guest strings are written with the file's `put_str(const char *)` helper (line 84), buffers with `scratch_block(bytes)`:
 
 ```cpp
     uint32_t spc = scratch_block(4), bps = scratch_block(4), fr = scratch_block(4), tot = scratch_block(4);
-    uint32_t root = scratch_string("C:\\");
+    uint32_t root = put_str("C:\\");
     check(call_import(c, "KERNEL32.dll", "GetDiskFreeSpaceA", {root, spc, bps, fr, tot}) == 1,
           "GetDiskFreeSpaceA succeeds");
     check(rd32(spc) == 8 && rd32(bps) == 512 && rd32(fr) == 0x00100000 && rd32(tot) == 0x00200000,
@@ -868,7 +868,7 @@ In `runtime_tests.cpp`, inside the kernel32 test function that already exercises
           "GetSystemDirectoryA reports the size needed when the buffer is short");
 ```
 
-(`scratch_string` exists if another test writes a guest string; otherwise write the bytes with `wr8` from a loop.)
+(`put_str` is the file's guest-string helper.)
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -918,7 +918,7 @@ cd kit && git add runtime/kernel32.cpp runtime/tests/runtime_tests.cpp && git co
 
 **Files:**
 - Modify: `kit/runtime/user32.cpp` (shims and `g_user32_shims` table)
-- Test: `kit/runtime/tests/runtime_tests.cpp` (extend the window test that checks `GetActiveWindow`)
+- Test: `kit/runtime/tests/runtime_tests.cpp` (extend `test_windows(X86 *c)`, line ~1340, after its `SetFocus` check)
 
 **Interfaces:**
 - Produces: `GetMenu(hwnd)` = 0; `WaitMessage()` yields once (calls `sched_checkpoint()` and returns 1); `FindWindowA(cls, title)` = 0 (a single-instance check finds nothing); `OpenIcon(hwnd)` = 1; `SystemParametersInfoA(action, ...)` = 0 with `SPI_GETWORKAREA` (48) writing the main window's client rect and returning 1; `GetMessagePos()` = packed last pointer position (`y << 16 | x`) as user32 records it; `GetMessageTime()` = the runtime's tick count; `SetForegroundWindow(hwnd)` = 1; `SetActiveWindow(hwnd)` = previous active (the main window handle); `IsIconic(hwnd)` = 0.
@@ -1016,7 +1016,7 @@ cd kit && git add runtime/user32.cpp runtime/tests/runtime_tests.cpp && git comm
 
 **Files:**
 - Modify: `kit/runtime/gdi32.cpp` (shims; table `g_gdi32_shims` at `:478`)
-- Test: `kit/runtime/tests/runtime_tests.cpp` (the gdi32 test that exercises `TextOutA`)
+- Test: `kit/runtime/tests/runtime_tests.cpp` (`test_gdi_and_com(X86 *c)`, line ~1146; use its existing `hdc`, or obtain one the way it does)
 
 **Interfaces:**
 - Produces: `GetDeviceCaps(hdc, index)`: `HORZRES` (8) and `VERTRES` (10) = the current display mode, `BITSPIXEL` (12) = its depth, `PLANES` (14) = 1, `RASTERCAPS` (38) = `RC_PALETTE` (0x100) only when depth is 8, `SIZEPALETTE` (104) = 256 when depth is 8 else 0, `NUMCOLORS` (24) = 256 when depth 8 else -1, other indices 0. `GetTextExtentPointA(hdc, str, n, &size)`: size = (n * glyph_w, glyph_h) from the font the kit's `TextOutA` draws with, returns 1. `SetBkColor(hdc, color)` stores the colour for `TextOutA`'s opaque background and returns the previous value (`CLR_INVALID` 0xffffffff the first time is wrong; the default is white 0x00ffffff).
@@ -1030,7 +1030,7 @@ cd kit && git add runtime/user32.cpp runtime/tests/runtime_tests.cpp && git comm
     check(call_import(c, "GDI32.dll", "GetDeviceCaps", {hdc, 12}) == 16, "BITSPIXEL");
     check(call_import(c, "GDI32.dll", "GetDeviceCaps", {hdc, 14}) == 1, "PLANES");
     check(call_import(c, "GDI32.dll", "GetDeviceCaps", {hdc, 38}) == 0, "RASTERCAPS has no palette at 16 bpp");
-    uint32_t sz = scratch_block(8), text = scratch_string("Pharaoh");  // any 7-character string
+    uint32_t sz = scratch_block(8), text = put_str("ABCDEFG");  // any 7-character string; never a game name in kit code
     check(call_import(c, "GDI32.dll", "GetTextExtentPointA", {hdc, text, 7, sz}) == 1 &&
               rd32(sz) == 7 * gdi_glyph_width() && rd32(sz + 4) == gdi_glyph_height(),
           "GetTextExtentPointA measures with TextOutA's font");
