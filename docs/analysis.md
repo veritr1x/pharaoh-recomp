@@ -149,6 +149,48 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-13: Task 2.4 implements the ten user32 gaps
+
+Kit commit `d39439a` registers `GetMenu`, `IsIconic`, `OpenIcon`,
+`SetForegroundWindow`, `FindWindowA`, `SetActiveWindow`, `WaitMessage`,
+`SystemParametersInfoA`, `GetMessagePos` and `GetMessageTime` with their
+stdcall arities. Work-area queries reuse `GetClientRect`'s window record
+and fallback dimensions; pointer packing reads `g_cursor_x/y`, as
+`GetCursorPos` does; message time uses `host_millis()`, as `GetTickCount`
+does. `WaitMessage` calls the existing `sched_checkpoint()`.
+
+- Added all **11** checks immediately after `SetFocus`. The runtime suite
+  does not link the input gate, so the position test calls
+  `host_set_cursor_pos(200, 100)`, the user32 bridge used by
+  `host_input_motion`, and documents the substitution in its comment.
+- `.venv/bin/python tools/test.py --compile-only` exited **0** for the
+  baseline and test-only builds. The first implementation build exited
+  **1** with one undeclared-identifier error for `sched_checkpoint`.
+  Adding its local declaration, matching `runtime/imports.cpp`, fixed
+  this; the final build exited **0**, with **0** warning/error diagnostics.
+  The test-only build had **5** existing volatile-increment warnings.
+- `.venv/bin/ctest --test-dir build/cmake/macos -R runtime_tests
+  --output-on-failure` ran before the checks, after the checks and after
+  implementation: **490 checks / 32 failures**, **509 / 46**, then
+  **501 / 32**. All three exited **8**, with **0/1** suites passing.
+  Before implementation, `GetMenu` first failed stack cleanup, while
+  `SetForegroundWindow` was the first new return-value failure. All 11
+  new messages now report `[ok]`, and the eight new ESP failures are gone.
+  A read-only Python log comparison exited **0**, confirming the same 32
+  baseline failures remain; unknown import arities decreased **73 → 63**.
+  The final `tee`, prescribed `grep` and `tail` stages each exited **0**.
+- `.venv/bin/python kit/tools/format.py --write` ran twice, each exiting
+  **0** and formatting **237** handwritten files; changes stayed within
+  the two task files. From `kit/`, `../.venv/bin/python -m pytest -q
+  tests/test_game_literals.py` exited **0**, **3 passed**.
+  `.venv/bin/python -m pytest -q tests` exited **0**, **4 passed**.
+  `.venv/bin/python kit/tools/check_game_literals.py`, the staged kit's
+  `.venv/bin/python kit/tools/check_repo.py`, and staged kit whitespace
+  checks exited **0**.
+- Logs remain under ignored `build/task-2.4-*.log`. No game-host run,
+  regeneration, translator or `x86.h` change, other-platform build or push
+  was performed. These checks establish shim behavior, not gameplay.
+
 #### 2026-09-13: Task 2.3 implements the two kernel32 gaps
 
 Kit commit `99e8784` implements `GetDiskFreeSpaceA` with 8 sectors per

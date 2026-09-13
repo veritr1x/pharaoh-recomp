@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Re-pin the kit with ten user32 window-state and message shims, including
+  client-area work bounds, recorded pointer position, tick-clock message time
+  and a scheduler checkpoint for `WaitMessage`. All 11 new runtime checks
+  pass; the suite retains its 32 known failures tied to the other game.
 - Re-pin the kit with `GetDiskFreeSpaceA` reporting 4 GB free of 8 GB and
   `GetSystemDirectoryA` returning `C:\WINDOWS\SYSTEM` or the required buffer
   size. Both imports preserve the guest stack; all four new runtime checks
