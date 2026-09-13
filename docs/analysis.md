@@ -153,6 +153,149 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-14: Task 7.3 real Android translation builds; device boot deferred
+
+Implemented Step 1 and `--push-game` under the explicit no-device
+adaptation. Kit `pharaoh` commit
+`502ad1ce689ed136b685c35f2df190fd7064cb37` contains:
+
+- `host/sdl/main.cpp`: obtain `SDL_GetAndroidExternalStoragePath()` before
+  layout initialization, apply its `switches.txt`, default `RECOMP_PROFILE_DIR`
+  to its writable `profile/`, and resolve `game/<executable>` there. The
+  loader still checks the fixed executable hash. Missing data logs the
+  expected executable and `adb push build/android/game "<external files>/"`,
+  names `tools/build.py --target android --push-game`, then quits SDL and
+  exits 2. The page overlay requires presenter/mod initialization and a
+  frame to draw into, so this uses the explicitly permitted log-and-exit
+  fallback instead of a new boot UI.
+- `host/game_path.cpp` and `.h`: an optional platform-supplied data root
+  searches only `game/<executable>` and requires a regular file; a missing
+  mobile file cannot fall back to a baked developer path. No Android API
+  or platform guard was added outside `host/sdl/`.
+- `host/sdl/platform_ui_desktop.cpp` and `.h`: Android fullscreen hints,
+  shared touch/keypad behavior without pointer capture, and a lifecycle
+  watcher to suspend/resume presentation and audio. Normal guest shutdown
+  calls `exit(code)` after the existing `SDL_Quit()`. This choice ends the
+  process after teardown; minimizing would leave a completed game in the
+  activity's task. Its device behavior remains unverified.
+- `tools/build.py`: `--push-game` installs first, rebuilds only the generated
+  `build/android/game` staging directory, and pushes it into
+  `/sdcard/Android/data/<bundle_id>/files/` before launching. It reuses
+  `stage_game_files.stage()`, hence the real `excluded()` helper and hash
+  `.stamp`. It removes no files on the device. Missing adb or no ready
+  device produces a clear failure for an explicit push; builds without
+  that option retain their device-action skip. Incompatible target or
+  `--no-install` combinations are rejected.
+- `tools/tests/test_build.py`: a tiny fake `original/gog/app` verifies
+  included bytes, excluded top directories and nested DLLs, the stamp,
+  stale staging cleanup, destination and install/push/launch order. Further
+  cases cover no device and invalid option combinations. The kit changelog
+  records the behavior.
+
+Read-only checks confirmed the pinned SHA-256, image base `0x00400000`
+and entry `0x00562fea`, and byte-identical generated/kit `x86.h` before
+building. Hash snapshots before and after confirm that every file in
+`build/recomp/gen/` is unchanged. **No regeneration or stub translation
+was used for the Android build.** The real configured install selects
+**1,304 files / 634,766,385 bytes / 605.360 MiB**, plus the stager's
+`.stamp`, using the existing exclusions. This is a source-file measurement;
+the real game was not staged or pushed because no device is attached.
+
+Build environment and command, from this game repository:
+
+```sh
+export JAVA_HOME='/Applications/Android Studio.app/Contents/jbr/Contents/Home'
+export ANDROID_HOME=/Users/sattam.thakur/Library/Android/sdk
+export ANDROID_NDK_HOME=/Users/sattam.thakur/Library/Android/sdk/ndk/27.2.12479018
+export PATH="$PWD/.venv/bin:$ANDROID_HOME/platform-tools:$PATH"
+.venv/bin/python tools/build.py --target android > build/task-7.3-android-build.log 2>&1
+```
+
+The first real build exited **0**, compiling **all 32** generated C files
+(`chunk_000.c` through `chunk_030.c`, plus `table.c`) with NDK Clang
+**18.0.3**, `--target=aarch64-none-linux-android29`. The shared library
+linked and Gradle reported **BUILD SUCCESSFUL**, **36 tasks: 4 executed,
+32 up-to-date**. It reported no device, skipping install, launch and logcat.
+There were **28 compiler warnings, zero compiler errors**: existing
+keypad/presenter C-linkage declarations, Lua's deprecated `tmpnam`, and
+one newly unused Android `exe_flag`. Explicitly discarding the desktop
+flag corrected the new warning; the final rebuild, logged in
+`build/task-7.3-android-final.log`, exited **0**, with **6** existing
+C-linkage warnings and zero errors. Gradle again succeeded with **4
+executed / 32 up-to-date**. NDK CMake and Gradle deprecation warnings remain.
+
+Final artifacts:
+
+| Artifact | Measured size |
+| --- | --- |
+| `build/android/app/build/outputs/apk/debug/app-debug.apk` | **180,322,863 bytes** |
+| `build/cmake/android/host/libmain.so` | **140,061,976 bytes** |
+
+Python ZIP/ELF checks exited **0**: valid ZIP, exactly one packaged native
+library, byte-identical to the NDK output, ELF64 little-endian AArch64
+shared object, and no game asset directory, original executable, audio,
+cinematic or save entries. SDK `aapt2 dump badging` exited **0** and
+confirmed `dev.recompkit.pharaoh`, launch activity
+`dev.recompkit.RecompActivity`, minSdk **29**, targetSdk **36**, arm64-v8a
+and required Vulkan version **4198400** (1.1).
+
+| Verification command | Actual result |
+| --- | --- |
+| `.venv/bin/python -m pytest -q kit/tools/tests/test_build.py -k 'push_'` before implementation | Exit **1**; **4 failed, 13 deselected**. Expected missing keyword/option support. |
+| `.venv/bin/python -m pytest -q kit/tools/tests/test_build.py` | Exit **0**; **17 passed**. |
+| `.venv/bin/python tools/build.py --target android` | Initial and final builds each exit **0**; real translation and APK results above. |
+| SDK `adb devices` | Exit **0**; empty device list. |
+| `.venv/bin/python tools/build.py --target android --push-game` | Exit **1** as required. Incremental APK build succeeds with **36 up-to-date tasks**; then `No Android device attached; --push-game requires a ready device in adb devices`. No install, push or launch was issued. |
+| `.venv/bin/python tools/test.py` | Exit **0**; **118 passed, 3 skipped** in 7.20 s. |
+| `.venv/bin/python -m pytest -q tests kit/tests/test_game_literals.py kit/tools/recomp/tests/test_host_boundary.py` | Exit **0**; **9 passed**: 4 game config, 3 literal and 2 host-boundary tests. |
+| `.venv/bin/python tools/build.py --stub` | Exit **0**; desktop host links at `build/stub/PharaohRecomp.app`, with **1** existing C-linkage warning and zero errors. Checks the desktop branches of the changed SDL files. |
+| `.venv/bin/python kit/tools/format.py --write` | Both runs exit **0**; **241** handwritten files, no unrelated edits. |
+| `.venv/bin/python kit/tools/format.py` | Exit **0**; **241** files checked. |
+| `.venv/bin/python kit/tools/check_game_literals.py` | Exit **0**; no findings. |
+| `.venv/bin/python kit/tools/check_repo.py` on staged kit changes | Exit **0**; tracked source boundaries and local documentation links pass. |
+| `unzip -l build/android/app/build/outputs/apk/debug/app-debug.apk` | Exit **0**; **17 entries**, sole native library and sizes verified above. |
+| SDK build-tools 37.0.0 `aapt2 dump badging` on the APK | Exit **0**; identity and minimum-platform metadata above. |
+| Read-only `.venv/bin/python` identity, staging selection, compile-command, generation snapshot and ZIP/ELF assertions | Exit **0**; counts and identities above. |
+| Git whitespace/staged-scope checks | Exit **0**; only scoped source/docs and the gitlink staged. |
+
+An initial ancestry check ran in the landing checkout before it had the
+submodule's newer objects and exited **128** (`Not a valid commit name
+ae1aa477016a2fe977dad325c653d03bf17578c5`). Repeating it in `kit/`, where
+both commits exist, exited **0**. The actual local landing main started
+at **`2fe5c5d`**, not the plan's older `31f0f24`. After committing the kit
+and the game's pin/docs, landed locally:
+
+```sh
+git -C /Users/sattam.thakur/Documents/Tests/recomp-kit -c protocol.file.allow=always pull --ff-only /Users/sattam.thakur/Documents/Tests/pharaoh-recomp/kit pharaoh
+git -C kit -c protocol.file.allow=always fetch local main
+git -C kit checkout -q -B pharaoh local/main
+```
+
+The pull exited **0**, fast-forwarding the landing checkout from
+`2fe5c5d` to `502ad1c`, including the four previously unlanded commits.
+The first fetch revealed that the existing remote named `local` actually
+pointed to `https://github.com/veritr1x/recomp-kit.git`; fetch/reset exited
+0 but briefly selected its older `2fe5c5d`. Immediately restored
+`pharaoh` to `502ad1c`, then set `remote.local.url` to the specified
+`/Users/sattam.thakur/Documents/Tests/recomp-kit` and repeated fetch/reset.
+All correction commands exited **0**. Landing main, submodule `pharaoh`,
+`local/main` and the game's committed gitlink now all equal
+**`502ad1ce689ed136b685c35f2df190fd7064cb37`**. No commits were lost and
+no remote push ran. The pin hash needs no further change; this completed
+landing record is included in the amended game documentation commit.
+
+README now contains **Play on an Android tablet** with exact build,
+filtered push, adb launch, switches/timing-capture commands and the manual
+first-mission, house-building, scrolling, right-click, audio, save/load,
+background/resume and Quit checklist. Android reads the pushed directory
+directly, with no iOS-style bundle seeding or stamp-triggered replacement.
+**Steps 2 and 3 are deferred:** no device install, first boot, on-device
+missing-data/exit check, logcat game output, audible AAudio music, touch
+play or frame-rate measurement exists. Native CTest runtime/DX suites and
+iOS/Linux/Windows builds were not run in this host/data-path task. All raw
+logs, binaries, generated files, original inputs and saves stay uncommitted
+under their ignored directories.
+
 #### 2026-09-14: Task 7.2 Android stub APK packages SDLActivity
 
 Kit `pharaoh` commit `ae1aa47` adds a Gradle project template and

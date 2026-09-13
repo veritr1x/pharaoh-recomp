@@ -56,7 +56,7 @@ Housing construction and human walkers remain unverified. The interactive
 macOS app displays the title screen, but its automated click did not advance
 it, and quitting ended with a host fault; see the Task 4.2 run record.
 
-The kit is pinned to landed main `2fe5c5d` and includes Miles shims (41
+The kit is pinned to `502ad1c` and includes Miles shims (41
 imports), Bink and Smacker shims (19 imports), and the 15 missing user32,
 gdi32 and kernel32 shims. The
 [run record](docs/analysis.md) gives the commands, captures, button
@@ -194,26 +194,93 @@ separator, especially game-data lookup and save/load. A confirmed separator
 failure needs a kit `platform/os_win32.cpp` fix with a `platform_tests`
 regression case; none has been observed or fixed in this task.
 
-## Android (in progress)
+## Play on an Android tablet
 
-The kit's `android-stub` preset builds an arm64-v8a shared host library for
-Android 10 (API 29), using NDK 27.2.12479018, static SDL3/libc++ and the NDK's
-Vulkan and log libraries. From this checkout on macOS:
+**Build verified; device play unverified.** The real translation compiles
+and packages for arm64-v8a, Android 10 (API 29) or later, with Vulkan 1.1
+required. No Android device was attached for Task 7.3; installation, boot,
+music, touch play and lifecycle behavior still need a tablet check.
+
+First complete the game preparation and translation steps under
+[Build on macOS](#build-on-macos). The Android preset uses the existing
+`build/recomp/gen/`; do not pass `--stub` or regenerate for this build.
+Install Android Studio, SDK platform 36, build-tools 37.0.0,
+platform-tools and NDK 27.2.12479018. From this checkout on the development
+Mac (adjust SDK paths on another machine):
 
 ```sh
-export ANDROID_NDK_HOME="$HOME/Library/Android/sdk/ndk/27.2.12479018"
-export PATH="$PWD/.venv/bin:$PATH"
-cd kit
-cmake --preset android-stub
-cmake --build --preset android-stub --target recomp_app
-ls build/cmake/android-stub/host/libmain.so
+export JAVA_HOME='/Applications/Android Studio.app/Contents/jbr/Contents/Home'
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
+export PATH="$PWD/.venv/bin:$ANDROID_HOME/platform-tools:$PATH"
+.venv/bin/python tools/build.py --target android
 ```
 
-Install that NDK through the Android SDK manager first; CMake and Ninja
-come from the venv prerequisites above. The local stub link passed; see
-the [Task 7.1 record](docs/analysis.md#2026-09-14-task-71-android-stub-shared-library-links).
-This library contains a stub translation. APK packaging, installation and
-game execution on Android remain unimplemented or unverified.
+The APK is `build/android/app/build/outputs/apk/debug/app-debug.apk`;
+the native library is `build/cmake/android/host/libmain.so`. With no
+device, the build skips install and launch. Add `--no-install` to build
+without device actions even when a tablet is connected.
+
+Enable USB debugging, connect and authorize the tablet, then run:
+
+```sh
+adb devices
+.venv/bin/python tools/build.py --target android --push-game --console
+```
+
+Use `--device <adb serial>` when more than one device is ready. This
+command rebuilds as needed, installs the APK, stages `original/gog/app`
+minus `[bundle].exclude` into `build/android/game`, pushes it, launches
+the activity and streams logcat. An explicit `--push-game` fails when no
+device is ready. The current install contributes 1,304 files / 605.360 MiB
+plus an executable-hash `.stamp`; GOG support files, Windows libraries,
+manuals and undecoded `BINKS` cinematics are excluded. The equivalent push
+and launch commands, once staging exists and the APK is installed, are:
+
+```sh
+adb shell mkdir -p /sdcard/Android/data/dev.recompkit.pharaoh/files
+adb push build/android/game /sdcard/Android/data/dev.recompkit.pharaoh/files/
+adb shell am start -n dev.recompkit.pharaoh/dev.recompkit.RecompActivity
+adb logcat
+```
+
+SDL supplies the app's external files path; the host expects
+`game/Pharaoh.exe` beneath it and the loader still verifies the pinned
+hash. Missing data logs the expected path and push instruction, then
+exits. Android uses the pushed files directly; it does not copy a bundled
+game or reseed on a stamp change. The default writable profile is
+`/sdcard/Android/data/dev.recompkit.pharaoh/files/profile/`. Push does not
+delete device files or that profile; retain a backup before uninstalling
+the app or clearing its storage.
+
+For a manual check, tap **Click to Start**, **Play Pharaoh/Cleopatra**,
+create a new family, enter its name with the split keypad and press Return.
+Choose **Begin Family History**, **Predynastic Period**, its **Begin**
+arrow, and **Nubt → To the city**, then dismiss the housing tutorial.
+Build houses, hold each screen edge to scroll, and long-press a building
+for its right-click panel. Listen for music and effects, try Save/Load,
+background and resume the app, and use the game's Quit command. The host
+uses the shared touch mapper, pauses audio/presentation in the background,
+and calls `exit(code)` after `SDL_Quit()` on normal guest shutdown.
+These are implementation choices awaiting device verification.
+
+To collect frame timings, put full `RECOMP_` names in external
+`switches.txt`; `FRAME_TIMINGS` takes a CSV path, not a boolean:
+
+```sh
+cat > build/android-switches.txt <<'EOF'
+RECOMP_FRAME_TIMINGS=/sdcard/Android/data/dev.recompkit.pharaoh/files/frame-timings.csv
+EOF
+adb push build/android-switches.txt /sdcard/Android/data/dev.recompkit.pharaoh/files/switches.txt
+adb shell am force-stop dev.recompkit.pharaoh
+adb shell am start -n dev.recompkit.pharaoh/dev.recompkit.RecompActivity
+# After playing and quitting normally:
+adb pull /sdcard/Android/data/dev.recompkit.pharaoh/files/frame-timings.csv build/android-frame-timings.csv
+```
+
+Record device/GPU, display mode, timing results, audible audio and touch
+issues in the [run record](docs/analysis.md). A successful APK build alone
+does not establish that the game boots or plays.
 
 ## Play on macOS
 

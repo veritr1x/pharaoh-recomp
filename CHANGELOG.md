@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Re-pin the kit to `502ad1c`: Android loads `game/` from SDL external
+  files storage, reads `switches.txt`, uses a writable profile, and logs
+  setup instructions before exiting when data is missing. Add filtered
+  `--push-game` staging, touch/keypad and background lifecycle wiring, and
+  process exit after SDL teardown. The real arm64 translation and APK build
+  pass; document exact tablet setup and manual checks. With no Android
+  device attached, installation, first boot, music and touch play remain
+  unverified.
+
 - Re-pin the kit to `pharaoh` ae1aa47: `tools/build.py --target android`
   builds the NDK host and packages it with SDLActivity through the Gradle
   9.7.1 wrapper. The local arm64/API 29 stub APK builds with required
