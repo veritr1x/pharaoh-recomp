@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Re-pin the kit with 19 Bink and Smacker video stubs: opening a video
+  returns 0, BinkGetError returns "no video decoder", and each export has
+  its decorated stdcall arity. Native checks pass; cinematic skipping in
+  the game remains unverified.
 - Re-pin the kit with silent, stack-safe shims for all 41 Miles Sound System
   imports: startup succeeds, handles are refused and status calls report done.
   Native arity checks pass; the headless probe still stops at its watchdog

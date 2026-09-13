@@ -149,6 +149,38 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-13: Task 2.2 adds Bink and Smacker failure stubs
+
+Kit commit `df96987` registers the 12 Bink and 7 Smacker exports with
+their decorated stdcall arities. Both open calls return 0;
+`BinkGetError` returns a guest string containing "no video decoder";
+`BinkSetSoundSystem` returns 1; the remaining calls return 0.
+No decoder is present.
+
+- Added the prescribed `test_bink_smack_stubs` before implementation.
+  `.venv/bin/python kit/tools/test.py --game-dir
+  /Users/sattam.thakur/Documents/Tests/pharaoh-recomp/kit/games/stub
+  --compile-only` exited **0** before and after implementation. The
+  builds emitted **1 / 6** compiler warnings, respectively, all in
+  existing code, with **0** compiler errors and none from `bink.cpp`.
+- `.venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests
+  --output-on-failure` first exited **8**: **137,650 checks, 7 failures**,
+  starting at the first Bink call with `00000000 is not a shim trampoline`.
+  After implementation it exited **0**: **1/1** suites passed,
+  **137,656 checks, 0 failures**, including `Bink/Smacker stubs`.
+  Build and CTest output is retained under ignored `build/task-2.2-*.log`.
+- `.venv/bin/python kit/tools/format.py --write` exited **0**, formatting
+  **237** handwritten files with no unrelated tracked changes. From
+  `kit/`, `../.venv/bin/python -m pytest -q tests/test_game_literals.py`
+  exited **0**: **3 passed**. The game-literal checker, staged kit source
+  boundary checker and Git whitespace checks also exited **0**.
+  `.venv/bin/python -m pytest -q tests` exited **0**: **4 passed** for
+  the game configuration with the updated kit.
+- No headless run, game host build, regeneration or other-platform build
+  was performed. The translator and `x86.h` are unchanged. These native
+  checks establish shim behavior; whether the game reaches these calls
+  and continues past an unavailable cinematic remains unverified.
+
 #### 2026-09-13: Task 2.1 registers all 41 Miles imports; headless still stalls
 
 Resumed at Step 3 on game main `4e29b23` and kit branch `pharaoh` at
