@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Complete Task 2.6's smoke script: capture the Cleopatra title screen,
+  click its centre, then capture the five-button main menu after four
+  seconds and again two seconds later. Both 640x480 menu images match;
+  the macOS smoke run exits 0 after 21 seconds, silently. No menu button
+  is selected. The existing kit pin `8c8da01` is unchanged.
 - Task 2.9: re-pin the kit with creation, first-show and repositioning
   geometry messages, and screen metrics that follow the DirectDraw mode.
   The macOS smoke capture now shows the 640x480 Cleopatra title screen

@@ -149,6 +149,103 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-14: Task 2.6 resumed; title screen and main menu reached in the smoke host
+
+Resumed at Step 2 on clean game `main` at `7d53c5d` and clean kit
+`pharaoh` at `8c8da01a05fe69aa2ba0a68b3bab2ae72a5c8ba2`, already the
+game's submodule pin. Used the current smoke binary without rebuilding or
+regenerating. No kit changes or submodule re-pin were needed. The existing
+pin supplies the 41-entry silent Miles arity table, 19 Bink/Smacker shims
+(Bink opens a finished record), 15 Win32 shims, retained-pointer display
+writes and window geometry/mode fixes recorded below.
+
+The initial PNG shows Cleopatra's title artwork and **“Click to Start”**.
+Changed `smoke/main-menu.script` to wait 15 seconds, dump `title-screen`,
+send exactly `click left 320 240`, wait four seconds and dump `main-menu`.
+The first run showed menu buttons. Only then added `wait 2000` and
+`dump main-menu-settled` and reran. No menu button was clicked in either
+run; campaign entry is deliberately outside this resumed task.
+
+Ran this prescribed command twice, first with output redirected to
+`build/smoke-13.log`, then as shown with the final three-dump script:
+
+```sh
+RECOMP_SCRIPT=$PWD/smoke/main-menu.script RECOMP_HOST_DUMP_DIR=build/smoke \
+RECOMP_DDRAW_MODES=640x480x16,800x600x16,1024x768x16 RECOMP_SMOKE_DRAWABLE=1024x768 \
+RECOMP_MAX_SECONDS=40 build/recomp/pop_smoke > build/smoke-14.log 2>&1
+```
+
+| Run log | Host exit | Elapsed | Script steps | Presented frames | Dumps |
+| --- | --- | --- | --- | --- | --- |
+| `build/smoke-13.log` | **0** | **19.0 s** | **3/3** | **398**, 3 changed | **2** |
+| `build/smoke-14.log` | **0** | **21.0 s** | **4/4** | **438**, 3 changed | **3** |
+
+Read both complete logs. Each reports Metal, **640x480 16bpp**, guest
+`ExitProcess(0)`, **0 audio plays**, **no undeliverable calls**, and a
+presented non-black fraction of **0.997**. The script finishes before the
+40-second cap; the logged stop is the guest exit, not the watchdog. Each
+reports three input changes announced and zero input reads in its counter;
+the captured screen transition is the evidence that the title click worked.
+The logs still contain the mod-loader warning, the offered-mode warning
+about omitted 640x480x8, undrawn `TextOutA` and no non-client area in
+`AdjustWindowRectEx`. The selected mode is 640x480x16. Neither log reports
+an unknown import, guest fault or `Unable to load BINK!`. Neither traces
+`sierra.ini` or music-file opens; those paths remain unverified, and no
+`RECOMP_LOG=1` run was added.
+
+Converted every dump using the actual smoke-host filenames:
+
+```sh
+.venv/bin/python kit/tools/recomp/ppm_to_png.py build/smoke/smoke_title-screen_present.ppm build/smoke/title-screen.png
+.venv/bin/python kit/tools/recomp/ppm_to_png.py build/smoke/smoke_main-menu_present.ppm build/smoke/main-menu.png
+.venv/bin/python kit/tools/recomp/ppm_to_png.py build/smoke/smoke_main-menu-settled_present.ppm build/smoke/main-menu-settled.png
+```
+
+The first two conversions ran after each host run; the third ran after
+the final run: **five conversions, all exit 0**, each **640x480**. Final
+captures overwrite the first run's two capture names. Visually inspected
+all five PNG results:
+
+- **`build/smoke/title-screen.png` (15 s):** Cleopatra's portrait at
+  left, gold Pharaoh/Cleopatra title and pyramids at right, “Click to
+  Start” at the bottom and the studio logos at lower right.
+- **`build/smoke/main-menu.png` (19 s):** an Egyptian throne room with
+  decorated columns, two thrones at the back, and five orange menu
+  buttons stacked across the upper centre.
+- **`build/smoke/main-menu-settled.png` (21 s):** the same throne room
+  and five buttons; pixel-identical to the preceding main-menu capture.
+
+Approximate button centres, estimated from both menu images in **640x480
+guest pixels** (not the 1024x768 host drawable):
+
+| Button text | Centre (x, y) |
+| --- | --- |
+| Play Pharaoh/Cleopatra | **(320, 112)** |
+| Activision Website | **(320, 152)** |
+| Mission Editor | **(320, 192)** |
+| Greatest Families | **(320, 232)** |
+| Quit | **(320, 272)** |
+
+Read-only `.venv/bin/python`/Pillow assertions exited **0**: each final
+PNG matches its PPM pixel-for-pixel, all three are 640x480, timestamps
+follow the final run's log creation, the title differs from the menu, and
+the two menus are identical. Non-black pixels: **306,350 / 307,200** for
+the title and **305,726 / 307,200** for each menu. Log assertions confirm
+the steps, frames, dump counts, guest exit, silent audio and lack of
+undeliverable calls. The smoke binary's SHA-256 is unchanged
+(`62245a8d702f6f886173b8bac69214804b3847eff0ba8cb663fa66b61507dad4`);
+the game's executable still matches its pinned SHA-256. `git check-ignore
+-q` passed for both run logs and all six PPM/PNG captures.
+
+Both repositories' `git diff --check` and the game's staged whitespace
+check exited **0**. Only the script, this run entry, README status and
+game changelog changed. No native or portable test suite was rerun for
+this script/documentation task; no rebuild, regeneration, kit commit,
+landing-checkout change, push or other-platform execution was performed.
+Main-menu presentation and the title click are verified; menu-button
+selection, gameplay and audio remain unverified. All captures and logs
+remain ignored and uncommitted under `build/`.
+
 #### 2026-09-13: Task 2.9 draws the Cleopatra title screen in the smoke host
 
 Started on game `main` at `1371f4e` and kit `pharaoh` at `546f015`.

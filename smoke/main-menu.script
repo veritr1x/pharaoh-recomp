@@ -1,5 +1,10 @@
-# Attempt to boot to the main menu and dump the presented frame.
-# Task 2.7 result: a black 640x480 frame and guest exit 0, without the Bink
-# open-failure diagnostic. See docs/analysis.md. No menu click is verified yet.
+# Capture the title screen, then click through to the main menu.
+# Coordinates are guest pixels at 640x480, the mode selected by the game.
+# Stop at the menu without clicking any of its buttons.
 wait 15000
+dump title-screen
+click left 320 240
+wait 4000
 dump main-menu
+wait 2000
+dump main-menu-settled

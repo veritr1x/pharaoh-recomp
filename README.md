@@ -34,20 +34,19 @@ cinematics are Bink and Smacker video. The Bink shim returns a finished
 video record to skip decoding; Smacker still refuses to open a video.
 The measurements are in [docs/analysis.md](docs/analysis.md).
 
-## Status: the Cleopatra title screen draws in the macOS smoke host
+## Status: boots to the title screen and main menu in the smoke host on macOS; silent
 
-Task 2.9's rebuilt smoke host captures the 640x480 Cleopatra title screen,
-including “Click to skip”: 318 presented frames, with a presented non-black
-fraction of 0.997. Window geometry messages and screen metrics that follow
-the DirectDraw mode let the game fill its previously empty blit rectangle.
-The 15-second dump-only run exits through `ExitProcess(0)`. Main-menu
-interaction and gameplay remain unverified.
+`smoke/main-menu.script` captures the 640x480 Cleopatra title screen with
+“Click to Start”, clicks its centre, and captures the five-button main menu
+four seconds later and again after another two seconds. Both menu captures
+are identical. The 21-second run presents 438 frames and exits through
+`ExitProcess(0)`, with zero audio plays. Menu-button selection and gameplay
+remain unverified.
 
 The kit includes silent Miles shims (41 imports), Bink and Smacker shims
-(19 imports), and the 15 missing user32, gdi32 and kernel32 shims. All nine
-new window checks pass; the runtime suite retains the same 32 known
-failures in checks tied to another game. DirectDraw passes 137,868 checks.
-The [run record](docs/analysis.md) gives the commands, capture and limits.
+(19 imports), and the 15 missing user32, gdi32 and kernel32 shims. The
+[run record](docs/analysis.md) gives the commands, captures, button
+coordinates and limits.
 
 ## Build on macOS
 
