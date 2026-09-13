@@ -19,7 +19,15 @@
 - Native code builds only through `tools/build.py` and `tools/test.py`. Kit sources are formatted with `.venv/bin/python kit/tools/format.py --write`.
 - Nothing generated, no game file, no run log and no save is committed. `original/`, `analysis/`, `build/` are ignored.
 - Executable identity is fixed: `Pharaoh.exe`, SHA-256 `b21b7d719491bb45dfb324ba95231a5b0960ab25fea1bf3fb21da65da7eca662`, image base `0x00400000`, entry `0x00562fea`.
-- Kit-side tests: `runtime/tests/runtime_tests.cpp` uses `check(cond, "message %u", ...)` and `call_import(c, "DLL.dll", "Name", {args})`; `dx/tests/dx_tests.cpp` uses `CHECK`, `CHECK_EQ`, `tramp("DLL.dll", "Name")`, `call_shim(t, {args})` and a `tests[]` table in `main`. Run them with `.venv/bin/python tools/test.py --native` from the game repository or `ctest --test-dir build/cmake/macos -R <name>`.
+- Kit-side tests: `runtime/tests/runtime_tests.cpp` uses `check(cond, "message %u", ...)` and `call_import(c, "DLL.dll", "Name", {args})`; `dx/tests/dx_tests.cpp` uses `CHECK`, `CHECK_EQ`, `tramp("DLL.dll", "Name")`, `call_shim(t, {args})` and a `tests[]` table in `main`. The native suites need no game code and one of them (`profile_tests`) is bound to the stub game's symbols, so build and run them against the kit's stub game, never against this game's translation:
+
+  ```bash
+  .venv/bin/python kit/tools/test.py --game-dir /Users/sattam.thakur/Documents/Tests/pharaoh-recomp/kit/games/stub --compile-only
+  .venv/bin/ctest --test-dir kit/build/cmake/macos -R "dx_tests|runtime_tests" --output-on-failure
+  ```
+
+  (`--compile-only` builds every test binary into `kit/build/cmake/macos`; `-R` picks the suite.)
+- The generated tree `build/recomp/gen/` carries a copy of `runtime/x86.h` taken at regeneration time; after a kit change to `x86.h`, run `tools/build.py --regenerate` before trusting a host build.
 - Commit messages: imperative subject, a body that says what changed and why. Kit commits go on branch `pharaoh` in `kit/`; game commits go on `main` of the game repository and re-pin the submodule.
 - Minimum platforms (kit decision): iOS 17, Android 10 with Vulkan 1.1, macOS 14, current Linux and Windows releases SDL3 supports.
 
@@ -631,7 +639,7 @@ If `imports_argc` does not exist, add `uint8_t imports_argc(uint32_t trampoline)
 - [ ] **Step 2: Run to verify failure**
 
 ```bash
-.venv/bin/python tools/build.py --target fixture --jobs 8 >/dev/null 2>&1; ctest --test-dir build/cmake/macos -R dx_tests --output-on-failure | tail -5
+.venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests --output-on-failure | tail -5
 ```
 
 Expected: FAIL at `tramp("mss32.dll", "_AIL_startup@0") != 0`.
@@ -708,7 +716,7 @@ Check the 41 names against `docs/analysis.md` (the `mss32` row) and the import l
 
 ```bash
 .venv/bin/python kit/tools/format.py --write
-.venv/bin/python tools/build.py --target fixture --jobs 8 >/dev/null; ctest --test-dir build/cmake/macos -R dx_tests --output-on-failure | tail -3
+.venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests --output-on-failure | tail -3
 cd kit && ../.venv/bin/python -m pytest -q tests/test_game_literals.py
 ```
 
@@ -752,7 +760,7 @@ static void test_bink_smack_stubs() {
 - [ ] **Step 2: Run to verify failure**
 
 ```bash
-ctest --test-dir build/cmake/macos -R dx_tests --output-on-failure | tail -3
+.venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests --output-on-failure | tail -3
 ```
 
 Expected: FAIL at the first `tramp`.
@@ -818,7 +826,7 @@ Register `bink_register()` in `dx_register_shims`, declare in `dx.h`, add `bink.
 - [ ] **Step 4: Build and test**
 
 ```bash
-.venv/bin/python kit/tools/format.py --write && .venv/bin/python tools/build.py --target fixture --jobs 8 >/dev/null; ctest --test-dir build/cmake/macos -R dx_tests --output-on-failure | tail -3
+.venv/bin/python kit/tools/format.py --write && .venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests --output-on-failure | tail -3
 ```
 
 Expected: PASS
@@ -865,7 +873,7 @@ In `runtime_tests.cpp`, inside the kernel32 test function that already exercises
 - [ ] **Step 2: Run to verify failure**
 
 ```bash
-.venv/bin/python tools/build.py --target fixture --jobs 8 >/dev/null; ctest --test-dir build/cmake/macos -R runtime_tests --output-on-failure | tail -5
+.venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir kit/build/cmake/macos -R runtime_tests --output-on-failure | tail -5
 ```
 
 Expected: FAIL on `GetDiskFreeSpaceA succeeds` (the logging stub returns 0).
@@ -902,7 +910,7 @@ Table entries: `{"KERNEL32.dll", "GetDiskFreeSpaceA", 5, k_GetDiskFreeSpaceA}`, 
 - [ ] **Step 4: Run tests, commit**
 
 ```bash
-.venv/bin/python kit/tools/format.py --write && .venv/bin/python tools/build.py --target fixture --jobs 8 >/dev/null; ctest --test-dir build/cmake/macos -R runtime_tests --output-on-failure | tail -3
+.venv/bin/python kit/tools/format.py --write && .venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir kit/build/cmake/macos -R runtime_tests --output-on-failure | tail -3
 cd kit && git add runtime/kernel32.cpp runtime/tests/runtime_tests.cpp && git commit -m "kernel32: GetDiskFreeSpaceA and GetSystemDirectoryA"
 ```
 
@@ -1000,7 +1008,7 @@ Replace `host_client_size`, `cursor_position`, `tick_count_ms` with the real hel
 - [ ] **Step 4: Test and commit**
 
 ```bash
-.venv/bin/python kit/tools/format.py --write && .venv/bin/python tools/build.py --target fixture --jobs 8 >/dev/null; ctest --test-dir build/cmake/macos -R runtime_tests --output-on-failure | tail -3
+.venv/bin/python kit/tools/format.py --write && .venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir kit/build/cmake/macos -R runtime_tests --output-on-failure | tail -3
 cd kit && git add runtime/user32.cpp runtime/tests/runtime_tests.cpp && git commit -m "user32: window state and message-position shims a 2000-era game polls"
 ```
 
@@ -1198,7 +1206,7 @@ Add a `Sample` struct (`handle, alive, channel, wave, volume=127, pan=64, loops=
 - [ ] **Step 5: Build, test, format, commit**
 
 ```bash
-.venv/bin/python kit/tools/format.py --write && .venv/bin/python tools/build.py --target fixture --jobs 8 >/dev/null; ctest --test-dir build/cmake/macos -R dx_tests --output-on-failure | tail -3
+.venv/bin/python kit/tools/format.py --write && .venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests --output-on-failure | tail -3
 cd kit && git add dx/riff.h dx/riff.cpp dx/mss32.cpp dx/CMakeLists.txt dx/tests/dx_tests.cpp && git commit -m "mss32: sample handles play RIFF WAVE images through the host mixer
 
 AIL_file_read loads the file into guest memory, AIL_set_sample_file parses
