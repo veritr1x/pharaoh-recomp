@@ -149,6 +149,109 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-13: Task 2.9 draws the Cleopatra title screen in the smoke host
+
+Started on game `main` at `1371f4e` and kit `pharaoh` at `546f015`.
+Kit was clean; the game's unrelated untracked `1/` directory was preserved.
+The Task 2.8 changes were already committed and pinned at this point; its
+older run record below describes the earlier, uncommitted stopping point.
+Task 2.9's kit commit is `8c8da01a05fe69aa2ba0a68b3bab2ae72a5c8ba2`.
+No changes were made in the separate kit landing checkout.
+
+Read-only `pefile` and Capstone checks confirmed the pinned executable's
+SHA-256, image base and entry point. At `0x00414de0`, the window procedure
+subtracts one from the message before indexing the byte table at
+`0x004163ac`. Messages 3 and 5 both select index 2 and target `0x00414e8a`
+through the pointer table at `0x00416390`. An initial verification lookup
+omitted that subtraction and failed; correcting the lookup from the
+disassembly passed. The handler checks `DAT_00e38e5c`, then in fullscreen
+calls `GetSystemMetrics(1)` and `(0)` and `SetRect` on `DAT_00e39130`.
+Its windowed branch calls `GetClientRect` and `ClientToScreen` for both
+corners. The imported function names were verified against the PE IAT.
+
+- `kit/runtime/user32.cpp` posts `WM_MOVE` then `WM_SIZE` after successful
+  creation, before the host's activation callback. Position and client size
+  are packed into 16-bit halves with zero wParam. `SetWindowPos` posts each
+  message unless its corresponding `SWP_NOMOVE`/`SWP_NOSIZE` flag is set.
+  `Window::shown` limits `ShowWindow`'s size message to its first show;
+  creation with `WS_VISIBLE` already delivers creation geometry and marks
+  the window shown. `GetSystemMetrics(0/1/16/17)` reads the existing
+  `ddraw_display_mode` hook, retaining the 1024x768 fallback and the
+  19-pixel caption deduction for index 17.
+- `kit/runtime/tests/runtime_tests.cpp` adds nine checks in `test_windows`,
+  using its actual 640x480 creation size. These inspect queue order, packed
+  geometry, zero wParam, no-op positioning, first show and repeated shows.
+  The test restores its original geometry and visibility; callback tests
+  drain their creation/show geometry before their existing queue checks.
+- `kit/dx/tests/dx_tests.cpp` checks all four screen/fullscreen metrics at
+  640x480x16 and their unchanged desktop fallback after a display reset.
+  Both changelogs and README record this task's behavior and observed status.
+
+Verification, in task order (full build/test output remains under ignored
+`build/task-2.9-*.log`):
+
+| Command | Actual result |
+| --- | --- |
+| `.venv/bin/python tools/test.py --compile-only` | Baseline, test-first and final builds: exit **0** each; compiler warnings **11 / 6 / 5**, errors **0** each. |
+| `.venv/bin/ctest --test-dir build/cmake/macos -R runtime_tests --output-on-failure` | Baseline **511 checks / 32 failures**; test-first **520 / 37**; final **520 / 32**. CTest exit **8** and **0/1** suites passing each time. All five newly failing checks became passing; all nine new checks pass. Exact comparison confirmed the same 32 baseline failure messages. |
+| `.venv/bin/python kit/tools/test.py --game-dir "$PWD/kit/games/stub" --compile-only` | Test-first and final builds: exit **0** each, compiler warnings **6 / 5**, errors **0** each. |
+| `.venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests --output-on-failure` | Test-first: **137,868 checks / 4 failures**, exit **8**, **0/1** suites passed. Failures were the four metrics returning 1024/768/1024/749 instead of 640/480/640/461. Final: **137,868 / 0**, exit **0**, **1/1** passed. |
+| `.venv/bin/python kit/tools/format.py --write` | Ran twice, including after updating the metrics comment: exit **0**, **237** handwritten files each; changes confined to task files. |
+| `.venv/bin/python tools/build.py --target smoke --jobs 8` | Exit **0**, **0** compiler warnings/errors; rebuilt user32 and linked the smoke host. No translator or `x86.h` change, so no regeneration. |
+
+Build output was retained instead of discarded. The final runtime CTest
+pipeline used `tee`, the prescribed geometry/check grep and `tail -8`;
+their exits were **8 / 0 / 0 / 0**. The final DX and smoke-build pipelines
+used `tee` and the prescribed tails, with all stages exiting **0**. Passing
+DX details were copied from CTest's `LastTest.log` into ignored build output.
+
+Ran the prescribed smoke command once:
+
+```sh
+RECOMP_SCRIPT=$PWD/smoke/main-menu.script RECOMP_HOST_DUMP_DIR=build/smoke \
+RECOMP_DDRAW_MODES=640x480x16,800x600x16,1024x768x16 RECOMP_SMOKE_DRAWABLE=1024x768 \
+RECOMP_MAX_SECONDS=30 build/recomp/pop_smoke > build/smoke-12.log 2>&1
+grep -E "non-black|presented frames" build/smoke-12.log
+.venv/bin/python kit/tools/recomp/ppm_to_png.py build/smoke/smoke_main-menu_present.ppm build/smoke/main-menu.png
+```
+
+Host, grep and conversion each exited **0**. The Metal smoke host reports
+**15.0 seconds**, **1/1 script steps**, **640x480 16bpp**, **318 presented
+frames**, **2** differing from their predecessor, **0 audio plays** and
+**no undeliverable calls**. It stopped at guest `ExitProcess(0)`. The
+presented non-black fraction is **0.997**; the separate scene figures
+remain **0.000**. The full log still includes the mod-loader warning,
+the offered-list warning about omitted 640x480x8, undrawn `TextOutA`, and
+the no-non-client-area `AdjustWindowRectEx` notice. Its selected mode is
+640x480x16; no unknown import, guest fault or Bink-open failure is reported.
+
+**PNG: `build/smoke/main-menu.png`, 640x480, Cleopatra portrait at left,
+gold title artwork and pyramids at right, and “Click to skip” along the
+bottom.** Visual inspection establishes a title screen, not a menu-button
+or gameplay interaction. Pillow counted **306,350 / 307,200 non-black
+pixels (0.997233)**. Read-only timestamp assertions confirm the PPM follows
+the rebuilt binary and the PNG follows the PPM. The task's title-or-menu
+capture expectation passed, so its conditional black-frame peek rerun was
+not needed. No additional script or input was sent.
+
+Additional verification:
+
+- `.venv/bin/python -m pytest -q tests`: exit **0**, **4 passed**.
+- From `kit/`, `../.venv/bin/python -m pytest -q tests/test_game_literals.py`:
+  exit **0**, **3 passed**; `../.venv/bin/python tools/check_game_literals.py`:
+  exit **0**, no findings.
+- From `kit/`, `../.venv/bin/python tools/check_repo.py` on the staged
+  four-file change: exit **0**, source boundaries and local links passed.
+- Both repositories' whitespace checks, exact baseline/new-check assertions,
+  executable/IAT assertions and image/timestamp assertions exited **0**.
+- `git check-ignore -q` passed for all **15** task logs and captures.
+
+Only Task 2.9 was implemented. The script verifies a captured title screen;
+main-menu interaction, gameplay, audio and other-platform execution remain
+unverified. No push or landing-checkout change was performed. Logs, game
+inputs, generated code, binaries and captures stay uncommitted under their
+ignored directories.
+
 #### 2026-09-13: Task 2.8 retained-pointer regression passes; smoke remains black
 
 Started on game `main` at `d49d0fa2714c657c90c42374bdbd9fe2d99660ab`

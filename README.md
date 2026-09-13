@@ -34,21 +34,20 @@ cinematics are Bink and Smacker video. The Bink shim returns a finished
 video record to skip decoding; Smacker still refuses to open a video.
 The measurements are in [docs/analysis.md](docs/analysis.md).
 
-## Status: retained-pointer checks pass; macOS smoke capture remains black
+## Status: the Cleopatra title screen draws in the macOS smoke host
 
-The app, headless and smoke hosts build. Task 2.8's DirectDraw regression
-passes for writes through pointers retained after `Unlock`, with the CPU
-recording path shared with written locks. The rebuilt smoke host still
-captures a uniformly black 640x480 frame: 314 presented frames, with
-non-black figures of 0.000. The latest run exits through `ExitProcess(0)`
-after 15 seconds. The main menu and gameplay remain unverified.
+Task 2.9's rebuilt smoke host captures the 640x480 Cleopatra title screen,
+including “Click to skip”: 318 presented frames, with a presented non-black
+fraction of 0.997. Window geometry messages and screen metrics that follow
+the DirectDraw mode let the game fill its previously empty blit rectangle.
+The 15-second dump-only run exits through `ExitProcess(0)`. Main-menu
+interaction and gameplay remain unverified.
 
-The working kit includes silent Miles shims (41 imports), Bink and Smacker
-shims (19 imports), and the 15 missing user32, gdi32 and kernel32 shims.
-The retained-pointer changes pass 137,844 native checks, but Task 2.8
-stopped at the unmet smoke capture expectation. They remain uncommitted;
-the kit pin is still `1ced72b`. The [run record](docs/analysis.md) gives the
-commands, capture and limits. The remaining black-frame cause is unknown.
+The kit includes silent Miles shims (41 imports), Bink and Smacker shims
+(19 imports), and the 15 missing user32, gdi32 and kernel32 shims. All nine
+new window checks pass; the runtime suite retains the same 32 known
+failures in checks tied to another game. DirectDraw passes 137,868 checks.
+The [run record](docs/analysis.md) gives the commands, capture and limits.
 
 ## Build on macOS
 

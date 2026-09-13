@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Task 2.9: re-pin the kit with creation, first-show and repositioning
+  geometry messages, and screen metrics that follow the DirectDraw mode.
+  The macOS smoke capture now shows the 640x480 Cleopatra title screen
+  with “Click to skip”: 318 presented frames, presented non-black 0.997,
+  exit 0. All nine new runtime checks pass with the same 32 baseline
+  failures; DirectDraw passes 137,868 checks. Menu interaction and gameplay
+  remain unverified. This pin also includes the committed Task 2.8 changes.
 - Task 2.8 working changes detect DirectDraw writes through pointers retained
   after `Unlock`, sharing the written-lock CPU recording path before blits
   and primary presentation. The native regression passes (137,844 checks,
