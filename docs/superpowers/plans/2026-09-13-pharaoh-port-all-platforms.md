@@ -360,6 +360,14 @@ cd .. && git add kit game.toml tests/test_game_config.py && git commit -m "The 0
 
 ### Task 1.3: Exclude jump-table slots from the data-pointer function scan
 
+> **Not needed (2026-09-13).** `Image.code_pointers` already takes
+> `exclude=tr.table_ranges` and skips both pointers stored in decoded table
+> storage and candidates pointing at it. The nine case bodies were accepted
+> only because their table's function was missing; with Task 1.2's seed they
+> are `kind: block, provenance: table` in `symbols.json`. Skipped; the steps
+> below are kept for the record.
+
+
 **Files:**
 - Modify: `kit/tools/recomp/translate.py` (the data-pointer scan; find with `grep -n "data-pointer\|discovered_by_scan" kit/tools/recomp/translate.py`)
 - Test: `kit/tools/recomp/tests/test_translate_tables.py` (extend or create next to existing table tests)
