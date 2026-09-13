@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Sound effects play: the kit's Miles Sound System shims (kit `pharaoh`
+  f4ae821) load WAV files into guest memory, parse them and play sample
+  handles through the host mixer with Miles volume and pan; the smoke run of
+  `smoke/main-menu.script` reports one play at peak 0.78 (the menu click).
+  Music streams are next.
 - Complete Task 2.6's smoke script: capture the Cleopatra title screen,
   click its centre, then capture the five-button main menu after four
   seconds and again two seconds later. Both 640x480 menu images match;

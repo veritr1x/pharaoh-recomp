@@ -149,6 +149,19 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-14: sound effects through Miles (Task 3.1)
+
+Kit `pharaoh` f4ae821: `dx/riff.cpp` parses a PCM RIFF WAVE image in guest
+memory; `dx/mss32.cpp` implements `AIL_file_read` (the game passes a
+destination of 0 at both call sites, so the shim allocates), `AIL_mem_free_lock`,
+the sample handle API (allocate, init, set file, start, end, status, loop count,
+volume 0..127 to millibels as `2000*log10(v/127)`, pan 0..127 to -10000..10000)
+on the shared `dx_alloc_audio_channel` pool. `dx_tests`: 138,404 checks, 0
+failures. The smoke run of `smoke/main-menu.script` (21 s, 4 steps) reports
+`audio: 1 plays, loudest sample 0.782`: the click on the title screen. The
+smoke host has no `RECOMP_HOST_AUDIO_CAPTURE`; captures are the headless
+host's, so music is judged there once streams exist (Task 3.2).
+
 #### 2026-09-14: Task 2.6 resumed; title screen and main menu reached in the smoke host
 
 Resumed at Step 2 on clean game `main` at `7d53c5d` and clean kit
