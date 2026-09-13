@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Re-pin the kit to `pharaoh` ae1aa47: `tools/build.py --target android`
+  builds the NDK host and packages it with SDLActivity through the Gradle
+  9.7.1 wrapper. The local arm64/API 29 stub APK builds with required
+  Vulkan 1.1, compile/target SDK 36 and the game's app identity. No Android
+  device is attached, so install, launch, logcat and gameplay remain unverified.
+
 - Re-pin the kit to `pharaoh` da6d418: add Android arm64/API 29 NDK presets
   and a CI stub build, link the shared SDL host as `libmain.so`, and read
   arm64 Linux/Android fault writes from ESR signal-frame records. The local

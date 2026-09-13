@@ -153,6 +153,88 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-14: Task 7.2 Android stub APK packages SDLActivity
+
+Kit `pharaoh` commit `ae1aa47` adds a Gradle project template and
+`tools/build.py --target android`. The NDK preset builds the native library
+first. The renderer writes `build/android`, substitutes `app_name`,
+`bundle_id` and `id`, and points its Java source set at the same CMake
+build's `_deps/sdl3-src/android-project/app/src/main/java`. It copies
+`build/cmake/android-stub/host/libmain.so` into
+`build/android/app/src/main/jniLibs/arm64-v8a/`; Gradle never invokes CMake.
+These paths follow the existing external-game build-root convention.
+
+The template pins Gradle 9.7.1 and AGP 9.1.1, build-tools 37.0.0,
+compile/target SDK 36, minSdk 29 and arm64-v8a only. `RecompActivity`
+extends SDLActivity and loads only `main`. The manifest requires Vulkan
+1.1 (`0x401000`), landscape orientation and
+`requestLegacyExternalStorage="false"`; its application label resolves to
+`PharaohRecomp`. `--no-install` skips device actions, `--device` selects
+an adb serial, and `--console` streams logcat after install and launch.
+No ready adb device means those three actions are skipped.
+
+The exact prescribed test failed first with missing `android_project`
+(`AttributeError`, 1 failed, exit 1). After implementation, the initial
+focused file run passed all 5 then-present tests (exit 0). Additional
+checks cover the manifest contract, three host-platform preset selections,
+ready/offline/absent devices, console commands and ambiguous devices.
+`kit/tools/test.py` now includes `tools/tests/test_build.py` in its portable
+list; previously that file was not run by the requested suite command.
+
+Build environment and final command, from this repository:
+
+```sh
+export JAVA_HOME='/Applications/Android Studio.app/Contents/jbr/Contents/Home'
+export ANDROID_HOME=/Users/sattam.thakur/Library/Android/sdk
+export ANDROID_NDK_HOME=/Users/sattam.thakur/Library/Android/sdk/ndk/27.2.12479018
+export PATH="$PWD/.venv/bin:$ANDROID_HOME/platform-tools:$PATH"
+set -o pipefail
+.venv/bin/python tools/build.py --target android --stub 2>&1 | tee build/task-7.2-android-final.log | tail -5
+```
+
+The SDK initially had only platform `android-36.1`. Gradle installed
+Android SDK Platform 36 revision 2 using the already accepted SDK license.
+The cached distribution's `gradle wrapper --gradle-version 9.7.1`, run in
+`kit/platform/android` with the JDK above, exited 0 (1 task executed).
+The wrapper JAR, properties and both launch scripts are committed;
+file-specific Git attributes normalize the scripts while retaining CRLF
+for the Windows checkout. The first staged whitespace check flagged those
+CRLF lines (exit 2); after attributes and `git add --renormalize`, it passed.
+
+| Verification | Actual result |
+| --- | --- |
+| `.venv/bin/python -m pytest -q kit/tools/tests/test_build.py::test_android_templates_render` before implementation | Exit 1; 1 failed, expected missing helper. |
+| `.venv/bin/python -m pytest -q kit/tools/tests/test_build.py` after initial implementation | Exit 0; 5 passed in 0.03 s. |
+| `.venv/bin/python tools/build.py --target android --stub` with the pipeline above | Both runs exited 0. First: 36 Gradle tasks executed, 18 s; final: 36 up-to-date, 585 ms. Native link: 22 warning diagnostics, zero errors. |
+| `.venv/bin/python tools/test.py` | Both runs exited 0; 114 passed, 3 skipped (6.58 s initially; 6.72 s finally). Includes 13 tests from `tools/tests/test_build.py`. |
+| `.venv/bin/python kit/tools/format.py --write` | Exit 0; 241 handwritten files formatted, no native source changes. |
+| `.venv/bin/python kit/tools/check_game_literals.py` | Exit 0; no findings. |
+| `.venv/bin/python -m pytest -q tests` | Exit 0; 4 passed in 0.01 s. |
+| `.venv/bin/python kit/tools/check_repo.py` on staged kit changes | Exit 0; tracked source boundaries and local documentation links passed. |
+| `unzip -l build/android/app/build/outputs/apk/debug/app-debug.apk classes.dex lib/arm64-v8a/libmain.so` | Exit 0; entries reproduced below. |
+| SDK build-tools 37.0.0 `aapt2 dump badging` on that APK | Exit 0; `dev.recompkit.pharaoh`, label `PharaohRecomp`, SDK 29/36, arm64-v8a only, required Vulkan version 4198400 and launch activity `dev.recompkit.RecompActivity`. |
+| SDK `apkanalyzer dex code --class dev.recompkit.RecompActivity` and `dex packages --defined-only` on that APK | Exit 0; both activity classes are defined; bytecode confirms SDLActivity superclass and a one-element `getLibraries()` array containing `main`. The SDK launcher printed a nonfatal integer-expression warning. |
+| Read-only Python ZIP/sha256 assertions | Exit 0; ZIP integrity passes, only one native library is packaged, and it exactly matches the NDK output. |
+| SDK `adb devices` | Exit 0; empty device list. Build reports install, launch and logcat skipped. |
+
+APK: `build/android/app/build/outputs/apk/debug/app-debug.apk`,
+**40,252,530 bytes**. The requested `unzip -l` entries are:
+
+```text
+  2419220  01-01-1981 01:01   classes.dex
+ 37693352  01-01-1981 01:01   lib/arm64-v8a/libmain.so
+```
+
+The build also reports SDK XML-version, deprecated Java/source-set API and
+source-manifest `package` warnings; the required manifest package is kept
+and matches the Gradle namespace/applicationId. None prevents packaging.
+Full build output remains in ignored `build/task-7.2-android-build.log`
+and `build/task-7.2-android-final.log`. No APK, native library, SDL Java
+copy, game asset, save or raw run log is committed. This is a stub
+translation: no Android install, launch, logcat capture or gameplay was
+performed. Native CTest suites and other-platform builds were not run in
+this packaging task; Task 7.3 was not started.
+
 #### 2026-09-14: Task 7.1 Android stub shared library links
 
 Resumed at Step 3, preserving the existing Android preset, CMake, CI and
