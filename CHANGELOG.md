@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Status: document the measured macOS, iPad, Linux, Windows and Android
+  states with build commands and known issues. The macOS smoke host reaches
+  an advancing first mission with WAV effects; the app shows the title.
+  iPad boot and music-stream activity are logged, but touch play is untested.
+  Linux/Windows remain unrun; Android's real-translation APK builds without
+  a device run. Keep cinematics skipped and `BINKS` excluded from bundles
+  and staged game data, saving 139.921 MiB; record the decoder decision.
+  Manual Save/Load and the macOS shutdown fault remain open.
+  Publish the existing kit main pin `502ad1c`; portable/config tests and
+  macOS/iOS stub builds pass. No new device or gameplay run.
+
 - Re-pin the kit to `502ad1c`: Android loads `game/` from SDL external
   files storage, reads `switches.txt`, uses a writable profile, and logs
   setup instructions before exiting when data is missing. Add filtered

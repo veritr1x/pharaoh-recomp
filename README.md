@@ -3,9 +3,10 @@
 [Build & contribute](CONTRIBUTING.md) · [Port analysis](docs/analysis.md) ·
 [Testing](docs/testing.md) · [Changelog](CHANGELOG.md)
 
-A native macOS and iPad recompilation of **Pharaoh Gold** (the GOG release
+A native recompilation of **Pharaoh Gold** (the GOG release
 of Impressions Games' Pharaoh with its Cleopatra expansion, patch 2.1), in
-progress. Original game instructions are translated to C ahead of time and
+progress, with hosts for macOS, iPad, Linux, Windows and Android.
+Original game instructions are translated to C ahead of time and
 compiled with the native host, the way
 [populous-recomp](https://github.com/veritr1x/populous-recomp) and
 [majesty-recomp](https://github.com/veritr1x/majesty-recomp) do it.
@@ -34,7 +35,22 @@ cinematics are Bink and Smacker video. The Bink shim returns a finished
 video record to skip decoding; Smacker still refuses to open a video.
 The measurements are in [docs/analysis.md](docs/analysis.md).
 
-## Status: macOS smoke bring-up
+## Platform status
+
+Status as of 2026-09-14, from the [run log](docs/analysis.md). Build
+commands assume the game preparation and translation steps below; platform
+sections give prerequisites and installation commands. A stub or package
+build does not establish first-mission play.
+
+| Platform | Verified status / first-mission play | Build command | Known issues and remaining checks |
+| --- | --- | --- | --- |
+| macOS 14+ | Smoke reaches the title, menu and an advancing first mission; WAV effects work. The app shows the title and captures non-silent music. | `.venv/bin/python tools/build.py` (app); `.venv/bin/python tools/build.py --target smoke` | Shutdown SIGSEGV at `0x0056478f` remains open. Hand play is untested; the automated app click did not advance the title. Smoke music streaming is unverified. |
+| iPadOS 17+ | Device boots at **640x480x16** with a music stream active; audible output and first-mission touch play are unverified. | `.venv/bin/python tools/build.py --target ios --team <TEAM_ID> --no-install` | Presenter acknowledgement timeout uses a fallback. No title/menu capture or touch-play check; iOS configure fails from some shells. |
+| Linux | Host/tooling checks only on macOS; packager tests use fake binaries. Never built or run on Linux; first mission unverified. | `.venv/bin/python tools/build.py --regenerate --jobs 8` | Native package, Vulkan window/driver validation and gameplay remain untested. |
+| Windows | Host/tooling checks only on macOS; packager tests use fake binaries. Never built or run on Windows; first mission unverified. | `.venv\Scripts\python tools\build.py --regenerate --jobs 8` | Native package, Vulkan validation, guest path separators and gameplay remain untested. |
+| Android 10+, arm64, Vulkan 1.1 | APK builds with the real translation. No device was attached; never run, first mission unverified. | `.venv/bin/python tools/build.py --target android` | Install, boot, music, touch and lifecycle behavior await a device. Existing NDK/CMake and Gradle warnings remain. |
+
+### macOS smoke evidence
 
 `smoke/main-menu.script` captures the 640x480 Cleopatra title screen with
 “Click to Start”, clicks its centre, and captures the five-button main menu
@@ -44,7 +60,8 @@ are identical. The 21-second smoke run presents 438 frames and exits through
 run records the title-screen click at peak 0.782. In the headless host, the
 title-screen MP3 capture contains 24.092 seconds of audio, 23.8 seconds
 non-silent, with no logged underrun. The smoke host lacks streaming
-callbacks, so music output is verified in headless only.
+callbacks, so these smoke runs do not verify music. Task 4.2 also records
+38.0 seconds of non-silent music in the interactive app's mixer capture.
 
 `smoke/first-mission.script` enters a new family name, starts the Predynastic
 campaign, opens the Nubt briefing and dismisses the housing tutorial. Its
@@ -61,6 +78,25 @@ imports), Bink and Smacker shims (19 imports), and the 15 missing user32,
 gdi32 and kernel32 shims. The
 [run record](docs/analysis.md) gives the commands, captures, button
 coordinates and limits.
+
+### Known issues
+
+- The macOS app faults during shutdown after guest `ExitProcess(0)`:
+  **SIGSEGV at `0x0056478f`**, process exit 5. Presenter acknowledgement
+  timeouts also trigger a fallback on macOS and iPad.
+- `runtime_tests` retains **32 Populous-bound failures** (520 checks in
+  the recorded baseline). The portable Python checks below do not run
+  this game-backed suite.
+- GDI `TextOutA` is accepted but not drawn.
+- Cinematics are skipped by the Bink/Smacker stubs. `BINKS/` stays
+  excluded from bundles and staged game data, saving about **140 MiB**
+  on iPad and Android; see the [cinematics decision](docs/analysis.md#cinematics-decision-task-81).
+- Manual Save/Load remains unverified; profile autosaves do not establish
+  that saving through the menu and reloading work.
+- iOS configure fails from some shells: the compiler probe targets
+  `arm64-apple-macos17.0` with the macOS SDK. The orchestrator's other shell
+  built successfully, and Task 8.1's iOS stub build also passes from the
+  current shell. The earlier environment override remains unidentified.
 
 ## Build on macOS
 

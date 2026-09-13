@@ -122,6 +122,23 @@ so the kit's host-drawn pointer hook has no DirectDraw surface to point at.
   mapper would attach to the message pump, as it does for Majesty.
 - **Network**: none. The game has no multiplayer.
 
+### Cinematics decision (Task 8.1)
+
+Keep cinematics skipped and retain `BINKS` in `[bundle].exclude` for every
+bundle or staged game-data copy, including iPad and Android. No Bink
+decoder under a permissive licence is available to this port;
+[FFmpeg's `binkvideo` decoder](https://github.com/FFmpeg/FFmpeg/blob/master/libavcodec/bink.c)
+is LGPL-2.1-or-later and would require a separate integration and licensing
+decision. Keeping the files for a future decoder would add seven unused
+videos: Task 5.1 measured **146,718,084 bytes / 139.921 MiB** (the plan's
+roughly 140 MB), reducing staged game data from **745.282 to 605.360 MiB**
+when excluded. The current Bink stub returns a finished video record and
+Smacker refuses to open one; neither decodes cinematics. Keep the complete
+original installation, including `BINKS`, as the setup input. Task 5.1
+already updated `test_bundle_exclusions_and_setup` to require the exclusion
+and reject `BINKS/High/intro_big.bik` while retaining the executable,
+model text, graphics, audio and maps; that contract remains unchanged.
+
 ## Data
 
 | Directory | Size | |
@@ -152,6 +169,59 @@ write it.
 ### Run log
 
 Recorded runs of the pipeline against this executable, newest first.
+
+#### 2026-09-14: Task 8.1 cinematics decision, platform status and kit publication
+
+Keep the Task 5.1 `BINKS` exclusion and its existing regression test;
+`game.toml` changes only the bundle comment to cover iPad and Android.
+The [cinematics decision](#cinematics-decision-task-81) records the decoder
+options and measured 139.921 MiB saving. README now separates macOS smoke
+first-mission progress from app hand play, iPad boot/stream activity from
+audible music and touch play, and Linux/Windows/Android build checks from
+runtime evidence. Its known-issues list retains shutdown, the 32
+Populous-bound runtime failures, undrawn text, skipped videos, manual
+Save/Load and the earlier iOS shell problem.
+
+Ran the task's final four-command `&&` chain in order from this game
+checkout with `.venv/bin/python`; the chain exited **0**. Output stays in
+ignored `build/task-8.1-final-checks.log`.
+
+| Verification command | Actual result |
+| --- | --- |
+| `.venv/bin/python -m pytest -q tests/test_game_config.py -k test_bundle_exclusions_and_setup` (Step 1) | Exit **0**; **1 passed, 3 deselected** in 0.01 s. |
+| `.venv/bin/python tools/test.py` | Exit **0**; **118 passed, 3 skipped** in 6.62 s. |
+| `.venv/bin/python -m pytest -q tests` | Exit **0**; **4 passed** in 0.01 s. |
+| `.venv/bin/python tools/build.py --stub` | Exit **0**; linked `build/stub/PharaohRecomp.app`, one existing C-linkage warning, zero compiler errors. |
+| `.venv/bin/python tools/build.py --stub --target ios` | Exit **0**, **BUILD SUCCEEDED**; linked `build/ios-stub/Release/PharaohRecomp.app` using `arm64-apple-ios17.0` and iPhoneOS26.5 SDK, with signing disabled. Six existing C-linkage warnings, a UIDeviceFamily warning and a duplicate `-lobjc` warning; zero compiler errors. |
+
+The iOS stub build worked in this shell; no compiler-probe workaround or
+skip was needed. This does not identify the earlier shell override or
+establish a new device run. Native test suites and gameplay were not
+rerun for this documentation/comment-only task; the 32 runtime failures
+are the previously recorded baseline, not a fresh measurement.
+
+Landing and publication used the explicitly authorized sequence:
+
+```sh
+cd /Users/sattam.thakur/Documents/Tests/recomp-kit
+git -c protocol.file.allow=always pull --ff-only /Users/sattam.thakur/Documents/Tests/pharaoh-recomp/kit pharaoh
+git push origin main
+cd /Users/sattam.thakur/Documents/Tests/pharaoh-recomp
+git -C kit -c protocol.file.allow=always fetch local main
+git -C kit checkout -q -B pharaoh local/main
+```
+
+All four Git commands exited **0**. The landing checkout was already at
+`502ad1c`, so the fast-forward-only pull reported **Already up to date**.
+The push advanced GitHub main from `2fe5c5d` to
+**`502ad1ce689ed136b685c35f2df190fd7064cb37`**. Read-only `git ls-remote`
+and local ref/status assertions exited **0**: GitHub main, landing main,
+submodule `pharaoh` HEAD and its `local/main` all match that hash, and
+both kit checkouts are clean. The game's gitlink already names that
+commit, so refreshing the pin produces no gitlink diff or new kit commit.
+Only the four task files are changed in the game repository; no game
+repository push is performed. Assets, saves, generated files and logs
+remain uncommitted.
 
 #### 2026-09-14: Task 7.3 real Android translation builds; device boot deferred
 
