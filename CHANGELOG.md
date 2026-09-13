@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The kit submodule moves to kit main `31f0f24` (the previous pin `c2b4e93`
+  was rewritten away); kit work for this game happens on the submodule's
+  `pharaoh` branch and lands on main.
 - First run of the pipeline: Ghidra exports 4,502 functions, and the kit's
   translator converts 6,138 of 6,141 functions once its jump-table gate is
   waived for one switch at `0x004ab2af` whose function the listing lacks
