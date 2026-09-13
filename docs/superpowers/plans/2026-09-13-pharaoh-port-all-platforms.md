@@ -1401,6 +1401,119 @@ EOF
 cd .. && git add kit docs/analysis.md README.md CHANGELOG.md && git commit -m "The main menu draws in the smoke host"
 ```
 
+### Task 2.9: `WM_MOVE`/`WM_SIZE` after window creation and sizing; `GetSystemMetrics` follows the display mode
+
+**Why (measured after Task 2.8):** the back surface is fully drawn but the
+game's `BltFast(0, 0, back, &DAT_00e39130, 0)` copies nothing because that
+source rectangle is `{0,0,0,0}`. The rectangle is filled only by the window
+procedure (`0x00414cd0`): its message table (byte index at `0x004163ac`,
+targets at `0x00416390`) sends message 3 (`WM_MOVE`) and 5 (`WM_SIZE`) to
+the handler at `0x00414e8a`, which in fullscreen (`DAT_00e38e5c != 0`,
+the case here) does `SetRect(&rect, 0, 0, GetSystemMetrics(SM_CXSCREEN),
+GetSystemMetrics(SM_CYSCREEN))` and in windowed mode `GetClientRect` +
+`ClientToScreen`. The kit posts `WM_ACTIVATEAPP`, `WM_ACTIVATE` and
+`WM_SETFOCUS` at boot (`host/boot.cpp:183`) and never `WM_MOVE` or
+`WM_SIZE`, which Windows sends during `CreateWindowEx`, `ShowWindow` and
+every `SetWindowPos` that moves or resizes. And `u_GetSystemMetrics`
+(`runtime/user32.cpp:837`) answers a fixed 1024x768, while the surfaces are
+640x480 after `SetDisplayMode`: even with the messages, the rect would
+overrun the surface and `read_rect` would refuse the blit.
+
+**Files:**
+- Modify: `kit/runtime/user32.cpp` (`u_CreateWindowExA`, `u_ShowWindow`, `u_SetWindowPos`, `u_GetSystemMetrics`)
+- Test: `kit/runtime/tests/runtime_tests.cpp` (`test_windows`: the posted messages), `kit/dx/tests/dx_tests.cpp` (a `GetSystemMetrics` check after `SetDisplayMode`)
+- Modify: `kit/CHANGELOG.md`, `docs/analysis.md`, `README.md`, `CHANGELOG.md`
+
+**Interfaces:**
+- Produces: after `CreateWindowExA` returns a handle, the queue holds `WM_MOVE` (`0x0003`, wParam 0, lParam = `y << 16 | x` of the client origin, which is the window position since no non-client area is modelled) followed by `WM_SIZE` (`0x0005`, wParam `SIZE_RESTORED` = 0, lParam = `h << 16 | w` of the client area). `SetWindowPos` posts `WM_MOVE` when it moved (no `SWP_NOMOVE`) and `WM_SIZE` when it resized (no `SWP_NOSIZE`). `ShowWindow` posts `WM_SIZE` the first time a window is shown. Use `host_post_message(hwnd, msg, wparam, lparam)` (`user32.cpp:121`). Order relative to the boot activation messages: creation messages are posted at creation, so they precede them.
+- `GetSystemMetrics`: `SM_CXSCREEN` (0), `SM_CYSCREEN` (1), `SM_CXFULLSCREEN` (16), `SM_CYFULLSCREEN` (17) answer the DirectDraw display mode when one is set (the hook Task 2.5 added for `GetDeviceCaps`; `SM_CYFULLSCREEN` keeps subtracting the caption height it subtracts today) and the fixed 1024x768 otherwise.
+
+- [ ] **Step 1: Write the failing tests**
+
+`runtime_tests.cpp`, in `test_windows` right after the window is created (find the `CreateWindowExA` call; drain any messages the existing test expects first, or peek before it does):
+
+```cpp
+    // Windows sends a new window its position and size; a game sizes its blit
+    // rectangle from them and never asks again.
+    uint32_t msgbuf = scratch_block(28);
+    check(call_import(c, "USER32.dll", "PeekMessageA", {msgbuf, hwnd, 0, 0, 1 /* PM_REMOVE */}) == 1 &&
+              rd32(msgbuf + 4) == 0x0003 && rd32(msgbuf + 12) == 0u,
+          "WM_MOVE follows CreateWindowExA (lParam %08x)", rd32(msgbuf + 12));
+    check(call_import(c, "USER32.dll", "PeekMessageA", {msgbuf, hwnd, 0, 0, 1}) == 1 &&
+              rd32(msgbuf + 4) == 0x0005 && rd32(msgbuf + 12) == ((480u << 16) | 640u),
+          "WM_SIZE follows it with the client size (lParam %08x)", rd32(msgbuf + 12));
+    call_import(c, "USER32.dll", "SetWindowPos", {hwnd, 0, 10, 20, 800, 600, 0});
+    check(call_import(c, "USER32.dll", "PeekMessageA", {msgbuf, hwnd, 0, 0, 1}) == 1 &&
+              rd32(msgbuf + 4) == 0x0003 && rd32(msgbuf + 12) == ((20u << 16) | 10u),
+          "SetWindowPos posts WM_MOVE");
+    check(call_import(c, "USER32.dll", "PeekMessageA", {msgbuf, hwnd, 0, 0, 1}) == 1 &&
+              rd32(msgbuf + 4) == 0x0005 && rd32(msgbuf + 12) == ((600u << 16) | 800u),
+          "and WM_SIZE");
+    call_import(c, "USER32.dll", "SetWindowPos", {hwnd, 0, 0, 0, 0, 0, 0x0003 /* NOSIZE|NOMOVE */});
+    check(call_import(c, "USER32.dll", "PeekMessageA", {msgbuf, hwnd, 0, 0, 1}) == 0,
+          "a SetWindowPos that neither moves nor sizes posts nothing");
+```
+
+(Adjust the 640x480 to the size the test's `CreateWindowExA` asks for, and restore the window's position/size afterwards if later checks depend on them. MSG layout: hwnd +0, message +4, wParam +8, lParam +12.)
+
+`dx_tests.cpp`, in the test that sets a display mode (grep `DD_SetDisplayMode`):
+
+```cpp
+    CHECK_EQ(call_shim(tramp("USER32.dll", "GetSystemMetrics"), {0}), 640u);   // SM_CXSCREEN follows the mode
+    CHECK_EQ(call_shim(tramp("USER32.dll", "GetSystemMetrics"), {1}), 480u);
+    CHECK_EQ(call_shim(tramp("USER32.dll", "GetSystemMetrics"), {16}), 640u);
+```
+
+- [ ] **Step 2: Run both to verify failure** (runtime_tests in this game's tree, baseline 32; dx_tests through the stub route).
+
+- [ ] **Step 3: Implement** in `user32.cpp`:
+
+```cpp
+// Windows tells a window where it is and how big it is as soon as it exists,
+// and again whenever that changes; a game sizes its blit rectangle from those
+// two messages and never asks again.
+static void post_geometry(uint32_t hwnd, const Window *w, bool moved, bool sized) {
+    if (moved)
+        host_post_message(hwnd, 0x0003 /* WM_MOVE */, 0,
+                          ((uint32_t)(uint16_t)w->y << 16) | (uint16_t)w->x);
+    if (sized)
+        host_post_message(hwnd, 0x0005 /* WM_SIZE */, 0 /* SIZE_RESTORED */,
+                          ((uint32_t)(uint16_t)w->h << 16) | (uint16_t)w->w);
+}
+```
+
+called from `u_CreateWindowExA` (both, after the window record exists and the handle is known), from `u_SetWindowPos` (`moved = !(flags & SWP_NOMOVE)`, `sized = !(flags & SWP_NOSIZE)`), and from `u_ShowWindow` (sized, the first time per window: add a `bool shown` to `Window`). In `u_GetSystemMetrics`, before the switch, read the display mode through the hook `GetDeviceCaps` uses and, when it reports a mode, answer cases 0/16 with its width and 1/17 with its height (17 minus the caption height as now).
+
+- [ ] **Step 4: Tests, rebuild the smoke host, run the menu script**
+
+```bash
+.venv/bin/python kit/tools/format.py --write
+.venv/bin/python tools/test.py --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir build/cmake/macos -R runtime_tests --output-on-failure | grep -E "WM_MOVE|WM_SIZE|SetWindowPos|checks|failures" | tail -8
+.venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests --output-on-failure | tail -3
+.venv/bin/python tools/build.py --target smoke --jobs 8 2>&1 | tail -2
+RECOMP_SCRIPT=$PWD/smoke/main-menu.script RECOMP_HOST_DUMP_DIR=build/smoke \
+RECOMP_DDRAW_MODES=640x480x16,800x600x16,1024x768x16 RECOMP_SMOKE_DRAWABLE=1024x768 \
+RECOMP_MAX_SECONDS=30 build/recomp/pop_smoke > build/smoke-12.log 2>&1; echo "exit $?"
+grep -E "non-black|presented frames" build/smoke-12.log
+.venv/bin/python kit/tools/recomp/ppm_to_png.py build/smoke/smoke_main-menu_present.ppm build/smoke/main-menu.png
+```
+
+Expected: the runtime suite is back at 32 failures with the new checks passing; `dx_tests` passes; `non-black` is well above 0 and the PNG shows the title or main menu. Record the run in `docs/analysis.md`; update README's status.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd kit && git add runtime/user32.cpp runtime/tests/runtime_tests.cpp dx/tests/dx_tests.cpp CHANGELOG.md && git commit -F - <<'EOF'
+user32: WM_MOVE and WM_SIZE for a new, shown or repositioned window; screen metrics follow the mode
+
+A game that sizes its blit rectangle in its window procedure never saw the
+two messages Windows sends at creation and on every SetWindowPos, and in
+fullscreen it sized it from GetSystemMetrics, which answered the desktop
+instead of the display mode.
+EOF
+cd .. && git add kit docs/analysis.md README.md CHANGELOG.md && git commit -m "The main menu draws in the smoke host"
+```
+
 ---
 
 ## Phase 3: sound through Miles
