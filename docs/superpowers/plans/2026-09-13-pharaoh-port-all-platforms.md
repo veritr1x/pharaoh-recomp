@@ -435,9 +435,11 @@ cd kit && git add tools/recomp && git commit -m "translate.py: a jump-table slot
 
 ```bash
 .venv/bin/python tools/build.py --regenerate --jobs 8 2>&1 | tee build/build-1.log | tail -20
+.venv/bin/python tools/build.py --target headless --jobs 8 2>&1 | tail -3
+.venv/bin/python tools/build.py --target smoke --jobs 8 2>&1 | tail -3
 ```
 
-Expected: the 32 chunks compile; `recomp_app`, `pop_headless`, `pop_smoke` link. A compile error in a chunk is a translator bug: record the chunk and instruction in the run log and fix it in `translate.py` with a unit test in `kit/tools/recomp/tests` before continuing.
+Expected: the 32 chunks compile; `recomp_app` links, then `pop_headless` and `pop_smoke` (each `--target` builds one host; find the binaries with `find build -name pop_headless -o -name pop_smoke`). A compile error in a chunk is a translator bug: record the chunk and instruction in the run log and fix it in `translate.py` with a unit test in `kit/tools/recomp/tests` before continuing.
 
 - [ ] **Step 2: Run headless for ten seconds**
 
