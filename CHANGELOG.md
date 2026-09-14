@@ -8,6 +8,10 @@
   previous mode's. The camera drift after taps on the iPad was the game's own
   edge scrolling with 640x480 bounds in the 800x600 city. Record the cause,
   the verbose smoke traces and the checks in docs/analysis.md.
+- `smoke/first-mission.script` skips the campaign cinematic with Return,
+  dismisses the Housing and Roads tutorial with two clicks on its check
+  mark, and ends with a tap-versus-click comparison on the File menu and
+  the minimap; it reaches the city again (40 of 40 steps).
 
 - Re-pin the kit to `pharaoh` `bc5b395` for Task 9.4: a finger tap places the pointer, then presses
   after one presented frame (60 ms without frame counts). The existing

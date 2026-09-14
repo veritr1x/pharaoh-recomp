@@ -37,15 +37,44 @@ click left 320 140
 wait 5000
 dump after-begin-family-history
 click left 612 452
-wait 5000
+# The campaign starts its own cinematic before the Nubt briefing.
+wait 3000
+key RETURN down
+wait 100
+key RETURN up
+wait 4000
+# Allow the briefing's input loop to settle after the video transition.
+wait 4000
 dump after-predynastic-begin
 click left 593 439
 wait 2000
 dump housing-and-roads
+wait 3000
 click left 611 452
-wait 2000
+wait 3000
+click left 611 452
+wait 3000
 dump city-entry
 wait 10000
 dump city-10s
 wait 20000
 dump city-30s
+# Compare the app's finger mapper with a scripted pointer click in the city.
+tap 24 8
+wait 2000
+dump tap-file
+# Dismiss a menu with a neutral pointer click; Escape opens the quit dialog.
+click left 240 240
+wait 1000
+tap 510 90
+wait 2000
+dump tap-minimap
+click left 24 8
+wait 2000
+dump click-file
+# Dismiss a menu with a neutral pointer click; Escape opens the quit dialog.
+click left 240 240
+wait 1000
+click left 510 90
+wait 2000
+dump click-minimap

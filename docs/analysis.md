@@ -214,6 +214,14 @@ it, so `ddraw_display_mode()` reports no mode and `GetSystemMetrics` /
 before each re-enable and the reads returning `1024`/`768`; the main-menu
 script passes 6 of 6 steps.
 
+Smoke comparison (640x480, `build/tapB`): `smoke/first-mission.script` now
+reaches the city (the Housing and Roads check mark at `611,452` takes the
+second of two clicks three seconds apart; a Return there went back to the
+briefing). In the city a smoke `tap` and a `click` at `24,8` both open the
+File menu and both at `510,90` leave the same minimap camera rectangle, so
+the finger mapper's messages are the pointer's. The device confirmation
+followed: the user reports taps now work.
+
 Consequence to note: with a 1024x768 desktop, the game at 800x600 scrolls
 only at the left and top screen edges (x < 1 or y < 1), exactly as on a
 Windows desktop larger than the game mode; at 1024x768 in-game all four edges
