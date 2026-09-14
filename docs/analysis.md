@@ -170,6 +170,70 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-14: Task 9.3 taps keep their position; edge holds still scroll
+
+The iPad trace supplied with Task 9.3 reports a **1210x834-point** window
+and **640x480** game image at **3.475 drawable pixels per game pixel**
+(1668 / 480), filling the window vertically. The city menu bar, **File
+Options Help**, sits about **14 window points** below the top; sidebar
+buttons extend to the bottom. Taps near those controls arrived at **y=0**
+or **y=833**, including the supplied trace excerpt
+`[pointer] event 94.0,0.0 ... hit 2 at 32,0`. The click missed the control
+and triggered edge scrolling. This is the task's existing device evidence;
+no new iPad run was performed here.
+
+At kit `27fc958`, `TouchMapper::place` snapped every placed point within
+`kTouchEdgeMargin` (**16 points**, plus the system inset on that edge) to
+the window edge. `click()` used that path too, and
+`test_tap_on_an_edge_clicks_there_then_moves_inside` asserted the unwanted
+snap and later inward nudge. Kit `pharaoh` **`9e31983`** adds
+`place(out, x, y, bool snap = true)` and passes `false` from `click()`.
+The press and delayed release now keep the finger's position, with no
+post-release nudge. Drag and edge-hold callers retain the default snapping;
+lifting an edge hold still moves the cursor inside to stop scrolling.
+
+Replaced the old test with `test_tap_near_an_edge_clicks_at_the_finger`:
+a tap at **(5, 400)** in **800x600** bounds must place, press and release
+at **(5, 400)**, with no movement after release or on a later tick.
+`test_edge_hold_scrolls_then_moves_the_cursor_inside` is unchanged.
+
+Verification, from this repository using the kit's stub game:
+
+```sh
+.venv/bin/python kit/tools/test.py --game-dir /Users/sattam.thakur/Documents/Tests/pharaoh-recomp/kit/games/stub --compile-only
+.venv/bin/ctest --test-dir kit/build/cmake/macos -R input_touch_tests --output-on-failure
+```
+
+The compile command ran **twice**, before and after the implementation;
+both exited **0**. With only the test changed, CTest failed **1/1** with
+**3 failed assertions**, exit **8**, covering placement, press, and release
+position/action count. After the implementation it passed **1/1**, exit
+**0**, including the unchanged edge-hold test.
+
+```sh
+.venv/bin/ctest --test-dir kit/build/cmake/macos -R host_tests --output-on-failure
+.venv/bin/python kit/tools/format.py --write
+.venv/bin/python kit/tools/format.py
+.venv/bin/python kit/tools/check_game_literals.py
+.venv/bin/python kit/tools/check_repo.py
+.venv/bin/python -m pytest -q kit/tests/test_game_literals.py tests
+git -C kit diff --cached --check
+```
+
+All exited **0**. `host_tests` passed **1/1**, with **3,910,394 checks,
+0 failures**. The formatter wrote and then checked **241 handwritten
+source files**, leaving only the intended native changes. The literal
+scan found no violations; tracked-source boundaries and documentation links
+passed with the kit changes staged. Pytest passed **7 tests** (3 kit
+literal checks and 4 game config checks); the staged kit diff had no
+whitespace errors.
+
+The game re-pins `kit/` to `9e31983` and documents the gestures. No iOS
+build, installation or post-fix device validation was performed; the
+orchestrator handles that next. The FFmpeg stash was not touched. No game
+files, generated output, run logs or saves are committed, and nothing was
+pushed or landed in the separate kit checkout.
+
 #### 2026-09-14: Task 9.2 settings restore and fullscreen pass; suite gate blocks commit
 
 Resumed on game `main` `5ba92ac`, with its recorded kit pin `722d51e`

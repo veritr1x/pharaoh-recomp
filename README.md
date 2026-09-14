@@ -378,6 +378,12 @@ when its executable or stamp is missing or the stamp differs; it replaces
 that directory on a stamp change, so retain a copy of any saves before
 updating to a different executable.
 
+Taps click where the finger is, including near the top menu bar and bottom
+sidebar buttons. Holding a finger on an edge scrolls; lifting it moves the
+cursor back inside to stop scrolling. Task 9.3 verifies this in the native
+touch tests; the iPad rebuild and device check remain pending in the
+[run log](docs/analysis.md).
+
 For a manual check, tap **Click to Start**, **Play Pharaoh/Cleopatra**,
 then create a new family (choose **Create** if the Family Registry appears).
 Use the on-screen keypad to enter a name and press Return, choose
@@ -391,8 +397,8 @@ which actions work.
 
 Task 5.1's automated install and launch are recorded in the
 [run log](docs/analysis.md), including the presenter fallback fault.
-Nothing was touched by hand: the displayed title/main menu, audible music
-and the checklist above remain unverified. The first shell's compiler probe
+That run included no hand input: the displayed title/main menu, audible
+music and the checklist above were unverified. The first shell's compiler probe
 used `arm64-apple-macos17.0` and the macOS SDK despite the iOS target; the
 orchestrator built successfully from another shell. This is an environment
 note, not a kit bug.

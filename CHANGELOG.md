@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Re-pin the kit to `pharaoh` `9e31983`: taps press and release where the
+  finger is near window edges, with no cursor nudge afterwards. Held fingers
+  and drags keep edge snapping for scrolling. Record Task 9.3's iPad trace
+  diagnosis, failing-then-passing tap regression and passing host tests;
+  document the iPad gestures. The iPad rebuild and device check are deferred
+  to the orchestrator.
+
 - Restore saved host settings before symbol-table validation and hide the
   six renderer/symbol-dependent rows from the F10 page. Document fn+F10 on
   macOS and holding Escape to release the mouse. The fullscreen relaunch
