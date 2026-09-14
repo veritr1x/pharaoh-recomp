@@ -175,6 +175,293 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-14: Task 9.4 delays a tap's press until after pointer placement
+
+**The supplied ordering fix passes native regressions; device confirmation
+remains with the orchestrator.** This final scope supersedes the city-entry
+prerequisite in the two earlier Task 9.4 records below. Started on game
+`main` at `d2e30a6` and kit `pharaoh` at `86bf512`, with the earlier smoke
+`tap` implementation, tests, investigation notes and first-mission script
+edits still uncommitted. No city reproduction was attempted during this pass.
+
+The orchestrator supplied the cause: `TouchMapper::click()` placed the cursor
+and emitted button-down in the same action batch. The guest's per-frame
+`FUN_004cf210` samples `GetCursorPos` once; the click handlers can therefore
+act on the position sampled before that placement. The user's iPad Pro
+observation at **800x600** was that Bluetooth trackpad clicks worked, while
+finger taps failed to open the top menus and sent the minimap camera to an
+edge. The existing `RECOMP_TRACE_POINTER=1` logs show delivery at the intended
+guest coordinates, not a coordinate-transform failure:
+
+- `build/ios-console-4.log:142-144`: `hit 2 at 24,8`, followed by button 0
+  down and up at `(24,8)`, both `consumed 0` (File menu).
+- `build/ios-console-5.log:59,70`: button 0 down and up at `(570,145)`,
+  both `consumed 0`; this is another correctly located down/up pair.
+- `build/ios-console-6.log:115-117` and `123-125`: `hit 2 at 650,147`,
+  followed by button 0 down and up at `(650,147)`, both `consumed 0`
+  (minimap).
+
+These three logs and `analysis/decompiled/Pharaoh.exe/functions/004cf210.c:19`
+were read again. They support pointer delivery and the per-frame sampling
+mechanism; this pass does not independently establish the guest's actual
+sample/press interleaving on the device. The earlier device frame dumps under
+`build/ios-pull/dumps*/present_*.png` and successful macOS pointer-click
+captures under `build/smoke-minimap/after-minimap-*.png` remain prior evidence,
+not new runs here.
+
+**Source correction to the supplied smoke comparison:** in the checked kit,
+`host/smoke_main.cpp`'s `run_step(HOST_SCRIPT_CLICK)` calls `move_pointer()`
+then `press_button()` consecutively, without a pump between them. Its
+`kClickHoldMs` is **120 ms**, and only release is explicitly deferred across
+turns/presents. Thus smoke's successful click is an observation, not proof
+that its move and press were already a presented frame apart. The mapper
+change below implements the supplied placement/press separation without
+changing that smoke click path.
+
+Changes:
+
+- `kit/host/input_touch.h`: add `kTouchPressDelayNs = 60 ms`, pending button,
+  coordinates, placement present count and press deadline.
+- `kit/host/input_touch.cpp`: `click()` emits only the unsnapped placement.
+  `tick()` emits the saved press once presents advance, or at the deadline
+  if presents are unknown. Only then does `press_held()` start
+  `release_due_`, `release_deadline_` and `presents_at_press_`. Release still
+  requires **90 ms and two presented frames**, with the existing **400 ms**
+  stalled-release fallback. A new finger flushes a pending press and its
+  release at the old tap's coordinates; focus loss discards an unissued
+  press. The dragging and edge-hold paths are unchanged.
+- `kit/host/tests/input_touch_tests.cpp`: first add regressions for placement
+  at `(100,100)` before press, the exact 60 ms fallback boundary, and two
+  rapid taps. Update earlier tap/release assumptions, including the smoke
+  mapper lifecycle and right clicks; retain edge-hold/drag coverage and add
+  focus-loss cancellation. Release tests measure from the actual press.
+- Retain the existing smoke verb work in `kit/host/script.h`, `script.cpp`,
+  `script_touch.h`, `smoke_main.cpp`, `host/CMakeLists.txt` and
+  `host/tests/host_tests.cpp`. The driver still uses real finger down/up,
+  ticks, clock/present counts and the app's window input gates.
+- Update both changelogs and re-pin the game to kit `pharaoh` `bc5b395`. Preserve the
+  pre-existing `smoke/first-mission.script` edits uncommitted; its navigation
+  is still unverified, as recorded below.
+
+Verification commands were run from the game repository; full outputs are
+under ignored `build/task94-final-*.log`:
+
+| Command | Actual result |
+| --- | --- |
+| `.venv/bin/python kit/tools/test.py --game-dir /Users/sattam.thakur/Documents/Tests/pharaoh-recomp/kit/games/stub --compile-only` | Exit 0 on all three runs: baseline, new failing regressions, final formatted implementation |
+| `.venv/bin/ctest --test-dir kit/build/cmake/macos -R 'input_touch_tests\|host_tests' --output-on-failure -V` | Baseline: exit 0, 2/2 suites; touch `ok`, host 3,919,446 checks / 0 failures. Before the fix: exit 8, 1/2 suites passed; exactly 9 touch assertions failed in the three new regressions, host 3,918,720 checks / 0 failures. Final: exit 0, 2/2 suites; touch `ok` (no numeric counter), host 3,913,065 checks / 0 failures |
+| `.venv/bin/python kit/tools/format.py --write` | Exit 0; 244 handwritten files formatted, only scoped source files changed |
+| `.venv/bin/python kit/tools/check_game_literals.py` | Exit 0; no violations |
+| `.venv/bin/python -m pytest -q kit/tests/test_game_literals.py tests` | Exit 0; 7 passed |
+| `.venv/bin/python kit/tools/check_repo.py` | Exit 0 on staged kit source, including the new smoke driver header; tracked source boundaries and local documentation links passed |
+| `.venv/bin/python kit/tools/format.py` | Exit 0; 244 handwritten files checked |
+| `git -C kit diff --cached --check` and `git diff --cached --check` | Both exit 0; no staged whitespace errors |
+
+The host suite's check count varies across runs; its failures remained zero.
+No translator or `x86.h` change was needed, so no regeneration was performed.
+No game-backed runtime suite, app build, city smoke, resolution/profile seed
+change, iPad build/install/run, landing-checkout change or push was performed.
+The orchestrator must rebuild the iPad app and confirm that File/minimap
+taps now use the tapped position. Native suite success does not establish
+that device result.
+
+#### 2026-09-14: Task 9.4 resume skips the campaign video; city baseline still invalid
+
+**The cinematic skip works, but the city-entry prerequisite remains blocked.**
+Preserved the existing uncommitted tap implementation on game `main`
+`d2e30a6` and kit `pharaoh` `86bf512`. Added the requested `wait 3000`,
+Return down, `wait 100`, Return up, `wait 4000` after the Predynastic
+Begin click `(612,452)`. Inspected the actual frame dumps before treating
+any later tap/click result as city evidence.
+
+The first resumed capture `after-predynastic-begin` now shows the Nubt
+briefing, not `pre_dynastic_big.bik`. However, after the briefing click
+`(593,439)`, `housing-and-roads` still shows the briefing. After the next
+click `(611,452)`, `city-entry` shows the Housing and Roads tutorial.
+The tutorial also remains in `city-10s` and `city-30s`. Increasing the wait
+after Return-up from 4 to 8 seconds did not change this sequence. The
+tracked script retains this tested 8-second variant as two 4-second waits.
+
+Two further diagnostic script copies were kept only under ignored `build/`:
+placing the pointer at each of the two navigation targets 500 ms before
+its click left even `city-entry` on the briefing; allowing 30 seconds
+after Return-up and 4 seconds after each navigation click again left
+`city-entry` on the tutorial. Neither establishes a mapper timing cause.
+No navigation-coordinate change or mapper change was attempted.
+
+All four runs used a separate fresh profile, the same binary, and this
+command with `VARIANT` replaced by the directory name in the table:
+
+```sh
+RECOMP_PROFILE_DIR="$PWD/build/task94/VARIANT/profile" \
+RECOMP_SCRIPT="$PWD/build/task94/VARIANT/script.script" \
+RECOMP_HOST_DUMP_DIR="$PWD/build/task94/VARIANT/dumps" \
+RECOMP_DDRAW_MODES=640x480x16 RECOMP_SMOKE_DRAWABLE=1024x768 \
+build/recomp/pop_smoke > build/task94/VARIANT/run.log 2>&1
+```
+
+The first run read `smoke/first-mission.script` directly; its exact contents
+were then copied to `640-resume/script.script`. The final two runs also set
+`RECOMP_SMOKE_TRACE=1`, confirming the navigation coordinates and separate
+script turns. Each run exited **0** through guest `ExitProcess(0)`, reported
+no undeliverable calls and wrote **15 dumps**. The script contains no visual
+expectations, so `all expectations met` does not validate the named screens.
+
+| Variant | Wait after campaign Return-up / navigation variation | Steps | Elapsed | Presents (changed) | `housing-and-roads` / `city-entry` |
+| --- | --- | --- | --- | --- | --- |
+| `640-resume` | 4 s | 39/39 | 81.0 s | 1,668 (274) | Briefing / tutorial |
+| `640-settled` | 8 s | 39/39 | 85.0 s | 1,748 (282) | Briefing / tutorial |
+| `640-placed` | 8 s; move, wait 500 ms, click at both navigation targets | 41/41 | 86.0 s | 1,771 (147) | Briefing / briefing |
+| `640-long-waits` | 30 s; 4 s after both navigation clicks | 39/39 | 111.0 s | 2,269 (285) | Briefing / tutorial |
+
+The appended File/minimap inputs consequently do **not** form a valid city
+comparison. In all four traces the mapper delivered `(24,8)` and `(510,90)`
+exactly, `consumed 0`, with release two presents after press. This proves
+delivery only. The first resumed File tap dismisses the tutorial and its
+dump shows the city with a File tooltip; the later pointer click shows
+the File menu. They acted on different starting screens. Do not report
+that as a reproduced tap-versus-click failure.
+
+Verification run during this resume:
+
+| Command | Actual result |
+| --- | --- |
+| `.venv/bin/python kit/tools/format.py --write` | Exit 0; 244 handwritten files formatted |
+| `.venv/bin/python kit/tools/test.py --game-dir /Users/sattam.thakur/Documents/Tests/pharaoh-recomp/kit/games/stub --compile-only` | Exit 0; stub-tree native binaries compiled |
+| `.venv/bin/ctest --test-dir kit/build/cmake/macos -R 'input_touch_tests\|host_tests\|dx_tests\|runtime_tests' --output-on-failure -V` | Exit 0; 4/4 CTest entries passed. Touch: `ok` (no numeric counter). Host: 3,912,249 checks, 0 failures. DX: 138,484 checks, 0 failures. Stub runtime explicitly skipped game checks because STUB.EXE is absent |
+| `.venv/bin/python tools/test.py --compile-only` | Exit 0; game-tree native binaries compiled |
+| `.venv/bin/ctest --test-dir build/cmake/macos -R runtime_tests --output-on-failure` (logged, then tailed 40 lines) | Exit 8; 520 checks, existing 32 failures; no runtime checks added |
+| `.venv/bin/python tools/build.py --target smoke --jobs 8` | Exit 0; final source already built, Ninja reported no work |
+| `.venv/bin/python -m pytest -q kit/tests/test_game_literals.py tests` | Exit 0; 7 passed |
+| `.venv/bin/python kit/tools/check_game_literals.py` | Exit 0; no violations |
+| `.venv/bin/python kit/tools/format.py` | Exit 0; 244 files checked |
+| `.venv/bin/python kit/tools/recomp/ppm_to_png.py INPUT.ppm OUTPUT.png` via checked subprocesses, plus Pillow pixel comparisons | All conversions exit 0; all 60 unique 640x480 dumps match their PPMs pixel-for-pixel |
+| Read-only Python identity/header checks | Exit 0; executable hash/base/entry match the pin and generated `x86.h` equals `kit/runtime/x86.h` |
+| `git -C kit diff --check` and `git diff --check` | Exit 0 |
+
+Full verification logs are `build/task94-*-resume*.log`; captures, script
+copies and run logs are in the four directories above. The profile seed
+`build/profile-speed/Pharaoh.inf` remains 564 bytes with byte 0x10 = 1;
+it was only read. No existing profile or save was replaced.
+
+Stopped under the task's prerequisite rule. The **800x600 repeat, a valid
+city tap/click comparison, mapper ordering/release variations with a failing
+regression, and a confirmed fix remain undone**. No iPad rebuild, device
+run, kit/game commit, re-pin, landing-checkout change or push was performed.
+The source changes remain uncommitted for the next resume.
+
+#### 2026-09-14: Task 9.4 blocked at the city-entry prerequisite
+
+**No cause established and no mapper fix committed.** The starting heads were
+game `d2e30a6` on `main` and kit `86bf512` on `pharaoh`, both clean. Task 9.4
+requires a valid city tap/click comparison before changing touch timing, and
+explicitly requires stopping when a prerequisite cannot be completed as written.
+The current `smoke/first-mission.script` skips the intro but its campaign
+navigation does not dismiss the Housing and Roads tutorial with video enabled.
+
+Source evidence, before changing the mapper:
+
+- `kit/host/input_touch.cpp`: `click()` emits an unsnapped placement and button
+  down in the same vector. `tick()` releases after at least 90 ms and two
+  reported presents, with a 400 ms timeout. Frame accounting starts from the
+  last `frames_presented()` call, not necessarily the count at action delivery.
+- `kit/host/sdl/main.cpp`: `push_touch_action_now()` queues motion, PLACE and
+  button events. The worker applies `host_gate_window_motion()`,
+  `host_gate_pointer_place()` and `host_gate_window_pointer()` /
+  `host_gate_button()`, followed by host input state and Win32 messages.
+  `after_events()` updates the mapper's present count and ticks it.
+- The existing smoke `HOST_SCRIPT_CLICK` calls `move_pointer()` and
+  `press_button()` consecutively in **one** `run_step()`, with no intervening
+  pump or presented frame. Only release is deferred: at least 120 ms and
+  `host_script_input_hold_frames()` presents. Thus the proposed distinction
+  that smoke already waits a frame between placement and press is false.
+- `analysis/decompiled/Pharaoh.exe/functions/004cf210.c:19` samples
+  `GetCursorPos` first, computes the current position and then samples
+  `DAT_00e38e07` bits 1 and 0 at lines 51 and 57. Both callers, `004d6b60.c:86`
+  and `00538c80.c:16`, call it before `FUN_004d71c0` handles UI input.
+- The wndproc is labelled `LAB_00414cd0` by the listing's `004cf960.c`, and
+  has no standalone `00414cd0.c` export. Its existing recovered translation
+  is in `build/recomp/gen/chunk_002.c`, `body_00414cd0`; it was read, not edited.
+  Instructions `004162fd..00416322` distinguish WM_LBUTTONDOWN (0x201) from
+  WM_LBUTTONUP (0x202), set/clear bit 0, and the common tail at
+  `0041634c..00416356` stores both coordinates from lParam. This does not
+  establish a stale-coordinate bug.
+- The SDL app additionally calls `sample_captured_pointer()` every pump,
+  and its captured-motion path samples that hardware pointer too. Smoke
+  cannot reproduce interference from a physical pointer. This is a possible
+  follow-up to the supplied device traces, not a diagnosed cause.
+
+Uncommitted instrumentation adds `tap x y` to `script.h` / `script.cpp` and
+`HostScriptTouch` in `script_touch.h`. It holds a stationary finger for 80 ms,
+calls the real mapper's finger down/up and tick methods, and supplies the smoke
+clock and presented-frame count. `smoke_main.cpp` maps guest pixel centres into
+the drawable and delivers the actions through the same window gate functions
+and message ordering as the app. The smoke target now links `input_touch.cpp`
+and SDL. `input_touch_tests` exercises the driver through the real mapper,
+including no click on finger-down and a release gated by presents; `host_tests`
+checks valid and malformed tap scripts. `input_touch.cpp` and its timing remain
+unchanged. Both changelogs describe the unfinished investigation.
+
+The trial used a fresh profile and appended File (24,8) and minimap (510,90)
+taps and clicks, dumping two seconds after each:
+
+```sh
+mkdir -p build/task94/640-before/profile
+RECOMP_PROFILE_DIR="$PWD/build/task94/640-before/profile" \
+RECOMP_SCRIPT="$PWD/smoke/first-mission.script" \
+RECOMP_HOST_DUMP_DIR="$PWD/build/task94/640-before/dumps" \
+RECOMP_DDRAW_MODES=640x480x16 RECOMP_SMOKE_DRAWABLE=1024x768 \
+build/recomp/pop_smoke > build/task94/640-before/run.log 2>&1
+```
+
+Actual result: **exit 1**, **39/39 steps**, **89.1 seconds**, **1,959 presents**
+(503 changed), **one unmet expectation** from forced shutdown after the guest
+did not handle WM_CLOSE within ten seconds. The captures, not their names,
+establish the failed prerequisite:
+
+| Capture | Actual screen |
+| --- | --- |
+| `after-begin-family-history` | Predynastic campaign selection |
+| `after-predynastic-begin` | Playing `pre_dynastic_big.bik` (709 frames, 24 fps) |
+| `housing-and-roads` | Nubt mission briefing |
+| `city-entry`, `city-10s`, `city-30s` | Housing and Roads tutorial, still open |
+| `tap-file` | City with File's tooltip, no open menu |
+| `tap-minimap`, `click-file`, `click-minimap` | Quit confirmation; invalid comparison |
+
+The initial tap reached the tutorial, not the required city baseline. The
+trial's Escape dismissal then opened the quit confirmation. That was a mistake
+in the appended comparison: the working script now uses a neutral pointer click
+instead, but has not been rerun past the blocked city prerequisite. The trial
+also mapped (510,90) to (509,89) because it floored the drawable pixel centre
+before delivery; the extra floor was removed and the smoke host rebuilt.
+The File tap trace was at (24,8), down at present 1435 and up at 1437; the
+minimap trace was down at 1497 and up at 1498, all `consumed 0`. These traces
+prove delivery, not that either control responded correctly.
+
+Verification completed (logs under ignored `build/task94-*`):
+
+| Command | Actual result |
+| --- | --- |
+| `.venv/bin/python kit/tools/test.py --game-dir /Users/sattam.thakur/Documents/Tests/pharaoh-recomp/kit/games/stub --compile-only` | Exit 0; all stub-tree native test binaries compiled |
+| `.venv/bin/python tools/build.py --target smoke --jobs 8` | Exit 0 before the trial; final rebuild after removing the extra floor also exit 0 |
+| `.venv/bin/ctest --test-dir kit/build/cmake/macos -R 'input_touch_tests\|host_tests' --output-on-failure` | Exit 0; 2/2 suites passed |
+| `.venv/bin/ctest --test-dir kit/build/cmake/macos -R 'dx_tests\|runtime_tests' --output-on-failure` | Exit 0; 2/2 entries passed; dx had 138,484 checks, zero failures; runtime explicitly skipped game checks because STUB.EXE is absent |
+| `.venv/bin/python tools/test.py --compile-only` | Exit 0; game-tree native test binaries compiled |
+| `.venv/bin/ctest --test-dir build/cmake/macos -R runtime_tests --output-on-failure` | Exit 8; 520 checks, the existing 32 failures; no runtime checks were added |
+| `.venv/bin/python kit/tools/format.py --write` | Exit 0; formatted 244 handwritten files, only intended source files changed |
+| `.venv/bin/python kit/tools/format.py` | Exit 0; checked 244 files |
+| `.venv/bin/python kit/tools/check_game_literals.py` | Exit 0; no violations |
+| `.venv/bin/python -m pytest -q kit/tests/test_game_literals.py tests` | Exit 0; 7 passed |
+| `git -C kit diff --check` and `git diff --check` | Exit 0; no whitespace errors |
+
+Stopped before the 800x600 repeat, a failing timing regression, any mapper
+timing change or post-fix smoke. The supplied seed
+`build/profile-speed/Pharaoh.inf` exists (564 bytes, byte 0x10 = 1) and was
+only read; no profile was overwritten. The city-entry prerequisite needs
+repair before this comparison is meaningful. No iPad rebuild or device run,
+kit commit, game commit, re-pin, separate-checkout landing or push was done.
+Private captures and the failed run log remain under `build/task94/640-before/`.
+
 #### 2026-09-14: Task 10.4 Linux/Windows FFmpeg configuration and intro-skipping smoke
 
 Started with clean game `main` at `97a5d4d` and kit `pharaoh` at `11c97a7`.

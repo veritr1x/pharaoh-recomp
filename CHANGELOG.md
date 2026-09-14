@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Re-pin the kit to `pharaoh` `bc5b395` for Task 9.4: a finger tap places the pointer, then presses
+  after one presented frame (60 ms without frame counts). The existing
+  90 ms / two-frame release hold starts at the press, and rapid taps remain
+  distinct. Retain the mapper-driven smoke `tap` verb and its tests. Record
+  the supplied stale-cursor diagnosis, the three device traces and the
+  passing native regressions; iPad menu/minimap confirmation remains with
+  the orchestrator. The city smoke reproduction was not repeated.
+
 - Re-pin the kit to `pharaoh` `86bf512` for FFmpeg on Linux and Windows: Linux defaults video ON
   and packages versioned shared objects beside the app with an `$ORIGIN`
   rpath; Windows enables video with MSYS2 bash/make and a MinGW-compatible
