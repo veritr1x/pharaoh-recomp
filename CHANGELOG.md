@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Re-pin the kit to `pharaoh` `c79585b`: cross-build shared FFmpeg for
+  arm64/iOS 17 and Android API 29, wire Xcode embedding and signing on copy,
+  and package Android's three `.so` files beside `libmain.so` with the LGPL
+  notice. Stub and real Android APK builds and ELF checks pass; standalone
+  iOS dylibs are arm64 with `@rpath` and Apple system dependencies only.
+  Record the exact commands and limits: the Xcode compiler probe still
+  targets macOS, and iOS app/signature checks and mobile playback remain
+  for the orchestrator/device environment. No Gradle override was needed.
+
 - Re-pin the kit to `pharaoh` `e46dc77`: play Bink cinematics through FFmpeg
   on macOS, including audio and a
   cooperative end to the video on host close. Add the six-step intro smoke

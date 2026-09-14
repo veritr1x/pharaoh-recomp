@@ -133,9 +133,11 @@ model text, graphics, audio and maps. The seven videos add the **146,718,084
 bytes / 139.921 MiB** measured in Task 5.1; the previous staged-data totals
 were **745.282 MiB** with them and **605.360 MiB** without them.
 
-Cinematics play through FFmpeg on macOS; other platforms build without
-video until their FFmpeg is added. Those builds still return a finished
-Bink record, and Smacker remains refused everywhere (no Smacker files ship).
+Cinematics play through FFmpeg on macOS. Task 10.3 packages FFmpeg in both
+Android APK variants and verifies its standalone arm64/iOS 17 cross build;
+mobile playback remains unverified. Linux and Windows still build without
+video and return a finished Bink record. Smacker remains refused everywhere
+(no Smacker files ship).
 Keep the complete original installation, including `BINKS`, as the setup
 input. The smoke and headless evidence and its limits are recorded below.
 
@@ -169,6 +171,140 @@ write it.
 ### Run log
 
 Recorded runs of the pipeline against this executable, newest first.
+
+#### 2026-09-14: Task 10.3 cross-builds FFmpeg for Android and iOS
+
+Started with clean game `main` at `d1e559a` and kit `pharaoh` at `e46dc77`.
+Committed the kit changes on `pharaoh` as `c79585b` and re-pinned here.
+Only this task's build configuration, packaging and docs changed. No runtime,
+translator, game address or executable identity changed; SHA-256, image base
+and entry point were rechecked and match the pinned identity above.
+
+- `kit/cmake/Dependencies.cmake` defaults video ON for macOS, iOS and
+  Android. Android uses the selected NDK's API-29 arm64 compiler, LLVM tools,
+  NDK sysroot and `--disable-symver`; imported libraries use the installed
+  unversioned `.so` names and SONAMEs. iOS uses the iPhoneOS clang/sysroot,
+  arm64/iOS 17 compile and link flags, and `@rpath` install names. All three
+  Apple-framework disable flags are accepted on both mobile targets and
+  remain in the common isolation flags. No configure flag had to be dropped.
+- `kit/cmake/IosBundle.cmake` uses imported targets in Xcode's **Embed
+  Frameworks** phase with `XCODE_EMBED_FRAMEWORKS_CODE_SIGN_ON_COPY=YES`,
+  supported since CMake 3.20 (kit minimum 3.24; installed 4.1.2). This is the
+  task's alternative to explicit post-build copy/codesign commands. The app
+  uses `@executable_path/Frameworks` and carries the notice at its bundle root.
+  Actual embedding and team signatures are **not yet verified**.
+- `kit/tools/build.py::android_apk` stages the three FFmpeg libraries beside
+  `libmain.so` and copies the notice to APK assets. It reads the configured
+  video option and removes those generated copies when video is OFF.
+  `--push-game` is unchanged. No change to the Gradle template was needed.
+- `kit/third_party/ffmpeg/NOTICE.md` records each platform's configure flags,
+  library naming, packaging and replacement workflow, preserving the LGPL
+  text. Both READMEs and changelogs describe the measured mobile state.
+
+Android verification, in order, from the game repository:
+
+```sh
+export ANDROID_NDK_HOME=/Users/sattam.thakur/Library/Android/sdk/ndk/27.2.12479018
+export ANDROID_HOME=/Users/sattam.thakur/Library/Android/sdk
+export JAVA_HOME='/Applications/Android Studio.app/Contents/jbr/Contents/Home'
+export PATH="$PWD/.venv/bin:$ANDROID_HOME/platform-tools:$PATH"
+.venv/bin/python tools/build.py --target android --stub
+.venv/bin/python tools/build.py --target android
+```
+
+Both exited **0**, including fresh FFmpeg downloads/configures/builds, in
+**29.77 / 26.10 seconds** (stub / real). Each log has **42 compiler warning
+diagnostics, zero error diagnostics**. After updating the notice, repeated
+both commands in the same order: **exit 0**, **2.00 / 2.23 seconds**. Gradle
+reported **36 tasks** each time: **6 executed / 30 up-to-date** for the stub,
+**4 / 32** for the real APK. The existing CMake/NDK and Gradle deprecation
+warnings remain. Gradle could not strip the four native libraries and
+packaged them as-is; neither `useLegacyPackaging` nor `keepDebugSymbols`
+was required for a successful package.
+
+The packager writes both variants to
+`build/android/app/build/outputs/apk/debug/app-debug.apk`; each was copied
+before the next build to ignored `build/task-10.3/android-{stub,real}.apk`.
+The final shared output is the real APK. Final sizes: **78,316,279 bytes**
+(stub), **180,631,967 bytes** (real). For each variant:
+
+```sh
+unzip -l build/task-10.3/android-stub.apk 'lib/arm64-v8a/*' 'assets/ffmpeg-NOTICE.md'
+unzip -l build/task-10.3/android-real.apk 'lib/arm64-v8a/*' 'assets/ffmpeg-NOTICE.md'
+"$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-readelf" -d build/cmake/android-stub/host/libmain.so
+"$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-readelf" -d build/cmake/android/host/libmain.so
+```
+
+All exited **0**. Each APK has exactly **4 arm64 libraries**: `libmain.so`,
+`libavformat.so`, `libavcodec.so`, `libavutil.so`. Both `libmain.so` files
+list all three FFmpeg names as `NEEDED`. FFmpeg installs exactly those
+three unversioned `.so` files; `llvm-readelf -h -d` confirms AArch64, matching
+SONAMEs and dependencies only on siblings, `libm.so` and `libc.so`.
+Byte comparisons confirm every packaged library equals its CMake output
+and the packaged notice equals the updated source notice. All **35 files**
+in `build/recomp/gen/` have unchanged SHA-256 hashes; the real Android build
+reused the translation. No Android device was attached: all four builds
+explicitly skipped install, launch and logcat. No `--push-game` was run.
+
+For iOS, ran `/bin/sh build/task-10.3/build-ios-ffmpeg.sh`: **exit 0,
+13.90 seconds**, including the exact iOS configure arguments now documented
+in the kit's FFmpeg notice, `make -j8` and `make install`. It uses the
+hash-verified ExternalProject source from the Android build, with a separate
+working directory `build/task-10.3/ios-ffmpeg-build` and prefix
+`build/task-10.3/ios-ffmpeg`. The compiler is `xcrun -sdk iphoneos clang`;
+`xcrun -sdk iphoneos --show-sdk-path` supplied the **iPhoneOS 26.5 SDK**.
+There are **30 upstream compiler warning diagnostics, zero errors**.
+
+For each of `libavformat.61.dylib`, `libavcodec.61.dylib` and
+`libavutil.59.dylib` under that prefix, `lipo -info`, `otool -L` and
+`otool -l` exited **0**. All three are **arm64**, with `LC_BUILD_VERSION`
+platform **2 (iOS)** and minimum **17.0**. Their own install names and
+cross-library references are `@rpath/libav*.dylib`. External dependencies
+are only `/usr/lib/libSystem.B.dylib` and Apple's CoreFoundation, CoreVideo
+and CoreMedia frameworks. No macOS/Homebrew dependency is present.
+
+Then, from `kit/` with the venv on PATH, ran:
+
+```sh
+cmake --preset ios-stub -DPython3_EXECUTABLE=/Users/sattam.thakur/Documents/Tests/pharaoh-recomp/.venv/bin/python
+```
+
+**Exit 1, 3.77 seconds**, before kit dependency configuration. CMake reports
+no C/C++ compiler. `kit/build/cmake/ios-stub/CMakeFiles/CMakeConfigureLog.yaml`
+shows the known Xcode probe error: `invalid version number in '-target
+arm64-apple-macos17.0'`, with the **MacOSX26.5 SDK** despite the iOS preset.
+Stopped this route as explicitly instructed; did not run
+`tools/build.py --target ios`. The orchestrator still needs the iOS app
+build, `codesign -dv` on the actual embedded dylibs, app signature validation
+and a device launch/playback check. Standalone FFmpeg success does not prove
+Xcode embedding, signing, app linking or playback.
+
+Additional verification:
+
+- `.venv/bin/python -m pytest -q kit/tests/test_build_py.py kit/tools/tests/test_build.py tests`:
+  **34 passed, exit 0** (including all 4 game config tests).
+- `.venv/bin/python tools/test.py`: **119 passed, 3 skipped, exit 0**.
+- `.venv/bin/python -m pytest -q kit/tests/test_game_literals.py`:
+  **3 passed, exit 0**; `.venv/bin/python kit/tools/check_game_literals.py`:
+  **exit 0**.
+- `.venv/bin/python kit/tools/format.py --write`: **243 handwritten native
+  files formatted, exit 0**, with no native source changes.
+- `.venv/bin/python build/task-10.3/verify_artifacts.py`: **exit 0**;
+  reruns checked unzip/readelf/lipo/otool commands, APK byte comparisons
+  and all 35 generated-file hashes. An additional read-only config check
+  confirms exactly **5 decoders, 2 demuxers and file protocol** in both
+  Android builds and iOS, with GPL/version3/nonfree/network and optional
+  external-library flags all disabled.
+
+The staged kit's `.venv/bin/python kit/tools/check_repo.py` passed source
+boundaries and local documentation links, **exit 0**. Both repositories'
+Git whitespace checks passed, **exit 0**.
+
+Full build/test output, scratch scripts, APK copies and the standalone iOS
+libraries remain under ignored `build/task-10.3/`. No game run, native CTest
+suite, regeneration, Linux/Windows build, remote push or device action was
+performed. The iOS app build, embedded signature checks and mobile device
+verification remain deferred to the orchestrator's environment.
 
 #### 2026-09-14: Task 10.2 decodes Bink into the game's DirectDraw surface
 

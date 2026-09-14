@@ -32,8 +32,9 @@ statically). It renders through **DirectDraw** version 1, which the kit
 models, and plays sound and MP3 music through the **Miles Sound System**
 (`mss32.dll`), which the kit handles with WAV sample and MP3 stream shims; its
 cinematics use Bink video, with unused Smacker imports. Cinematics play
-through FFmpeg on macOS; other platforms build without video until their
-FFmpeg is added. Smacker still refuses to open a video.
+through FFmpeg on macOS. Android APKs now include FFmpeg, and its standalone
+iOS cross build passes; mobile cinematic playback remains unverified.
+Linux and Windows still build without video. Smacker refuses to open a video.
 The measurements are in [docs/analysis.md](docs/analysis.md).
 
 ## Platform status
@@ -46,10 +47,10 @@ build does not establish first-mission play.
 | Platform | Verified status / first-mission play | Build command | Known issues and remaining checks |
 | --- | --- | --- | --- |
 | macOS 14+ | Cinematics decode through FFmpeg; intro smoke and headless audio capture pass. Earlier smoke reaches the title, menu and an advancing first mission; WAV effects work. The app shows the title and captures non-silent music. | `.venv/bin/python tools/build.py` (app); `.venv/bin/python tools/build.py --target smoke` | Shutdown SIGSEGV at `0x0056478f` remains open. Hand play is untested; the automated app click did not advance the title. Smoke music streaming is unverified. |
-| iPadOS 17+ | Device boots at **640x480x16** with a music stream active; audible output and first-mission touch play are unverified. | `.venv/bin/python tools/build.py --target ios --team <TEAM_ID> --no-install` | Presenter acknowledgement timeout uses a fallback. No title/menu capture or touch-play check; iOS configure fails from some shells. |
+| iPadOS 17+ | Earlier device build boots at **640x480x16** with a music stream active. Standalone FFmpeg arm64/iOS 17 cross build passes. | `.venv/bin/python tools/build.py --target ios --team <TEAM_ID> --no-install` | FFmpeg app build, embedded signatures and playback await the orchestrator's shell/device check. Audible output and first-mission touch play are unverified; presenter fallback remains. |
 | Linux | Host/tooling checks only on macOS; packager tests use fake binaries. Never built or run on Linux; first mission unverified. | `.venv/bin/python tools/build.py --regenerate --jobs 8` | Native package, Vulkan window/driver validation and gameplay remain untested. |
 | Windows | Host/tooling checks only on macOS; packager tests use fake binaries. Never built or run on Windows; first mission unverified. | `.venv\Scripts\python tools\build.py --regenerate --jobs 8` | Native package, Vulkan validation, guest path separators and gameplay remain untested. |
-| Android 10+, arm64, Vulkan 1.1 | APK builds with the real translation. No device was attached; never run, first mission unverified. | `.venv/bin/python tools/build.py --target android` | Install, boot, music, touch and lifecycle behavior await a device. Existing NDK/CMake and Gradle warnings remain. |
+| Android 10+, arm64, Vulkan 1.1 | Stub and real-translation APKs contain all three FFmpeg libraries; ELF dependencies pass. No device was attached; never run, first mission unverified. | `.venv/bin/python tools/build.py --target android` | Install, boot, cinematics, music, touch and lifecycle behavior await a device. Existing NDK/CMake and Gradle warnings remain. |
 
 ### macOS smoke evidence
 
@@ -96,8 +97,9 @@ coordinates and limits.
   the recorded baseline). The portable Python checks below do not run
   this game-backed suite.
 - GDI `TextOutA` is accepted but not drawn.
-- Bink cinematics play through FFmpeg on macOS; other platforms build
-  without video until their FFmpeg is added. `BINKS/` is included in
+- Bink cinematics play through FFmpeg on macOS. Android includes FFmpeg;
+  iOS cross-builds it, with app signing and device playback still pending.
+  Linux and Windows build without video. `BINKS/` is included in
   bundles and staged data, adding about **140 MiB**. Smacker remains refused;
   see the [cinematics decision](docs/analysis.md#cinematics-decision-task-81).
 - Manual Save/Load remains unverified; profile autosaves do not establish
@@ -244,7 +246,11 @@ regression case; none has been observed or fixed in this task.
 **Build verified; device play unverified.** The real translation compiles
 and packages for arm64-v8a, Android 10 (API 29) or later, with Vulkan 1.1
 required. No Android device was attached for Task 7.3; installation, boot,
-music, touch play and lifecycle behavior still need a tablet check.
+cinematics, music, touch play and lifecycle behavior still need a tablet check.
+Task 10.3 verifies the stub and real APKs with dynamically linked FFmpeg:
+`libavformat.so`, `libavcodec.so` and `libavutil.so` sit beside `libmain.so`
+under `lib/arm64-v8a/`. The first build fetches and cross-builds FFmpeg;
+the APK also carries `assets/ffmpeg-NOTICE.md`.
 
 First complete the game preparation and translation steps under
 [Build on macOS](#build-on-macos). The Android preset uses the existing
@@ -380,12 +386,19 @@ perl -e 'alarm 100; exec @ARGV' xcrun devicectl device process launch \
 The alarm bounds the console capture to 100 seconds; the recorded
 `App terminated due to signal 14` is that timer, not an app fault. For hand
 play, open the installed app from the iPad Home Screen. The bundle excludes GOG support
-files, Windows DLLs, Miles plug-ins, manuals and `BINKS` cinematics (there
-is no decoder). The current installation contributes **605 MiB** of game
+files, Windows DLLs, Miles plug-ins and manuals. It retains `BINKS`
+cinematics; the current installation contributes about **745 MiB** of game
 files. The host copies the bundled game into writable `Documents/game`
 when its executable or stamp is missing or the stamp differs; it replaces
 that directory on a stamp change, so retain a copy of any saves before
 updating to a different executable.
+
+Task 10.3 enables FFmpeg for arm64/iOS 17 and wires its three dylibs into
+Xcode's signed Embed Frameworks phase, under `Frameworks/` with the app
+rpath `@executable_path/Frameworks`. The standalone cross build passes;
+the current shell's macOS-targeted Xcode compiler probe prevents an app
+build here. The orchestrator must check `codesign -dv` on the embedded
+dylibs and launch on the device before iOS cinematics can be called verified.
 
 Taps click where the finger is, including near the top menu bar and bottom
 sidebar buttons. Holding a finger on an edge scrolls; lifting it moves the
