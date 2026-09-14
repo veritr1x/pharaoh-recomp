@@ -31,8 +31,9 @@ The GOG installer ships one game executable, **`Pharaoh.exe`** (Pharaoh
 statically). It renders through **DirectDraw** version 1, which the kit
 models, and plays sound and MP3 music through the **Miles Sound System**
 (`mss32.dll`), which the kit handles with WAV sample and MP3 stream shims; its
-cinematics are Bink and Smacker video. The Bink shim returns a finished
-video record to skip decoding; Smacker still refuses to open a video.
+cinematics use Bink video, with unused Smacker imports. Cinematics play
+through FFmpeg on macOS; other platforms build without video until their
+FFmpeg is added. Smacker still refuses to open a video.
 The measurements are in [docs/analysis.md](docs/analysis.md).
 
 ## Platform status
@@ -44,13 +45,20 @@ build does not establish first-mission play.
 
 | Platform | Verified status / first-mission play | Build command | Known issues and remaining checks |
 | --- | --- | --- | --- |
-| macOS 14+ | Smoke reaches the title, menu and an advancing first mission; WAV effects work. The app shows the title and captures non-silent music. | `.venv/bin/python tools/build.py` (app); `.venv/bin/python tools/build.py --target smoke` | Shutdown SIGSEGV at `0x0056478f` remains open. Hand play is untested; the automated app click did not advance the title. Smoke music streaming is unverified. |
+| macOS 14+ | Cinematics decode through FFmpeg; intro smoke and headless audio capture pass. Earlier smoke reaches the title, menu and an advancing first mission; WAV effects work. The app shows the title and captures non-silent music. | `.venv/bin/python tools/build.py` (app); `.venv/bin/python tools/build.py --target smoke` | Shutdown SIGSEGV at `0x0056478f` remains open. Hand play is untested; the automated app click did not advance the title. Smoke music streaming is unverified. |
 | iPadOS 17+ | Device boots at **640x480x16** with a music stream active; audible output and first-mission touch play are unverified. | `.venv/bin/python tools/build.py --target ios --team <TEAM_ID> --no-install` | Presenter acknowledgement timeout uses a fallback. No title/menu capture or touch-play check; iOS configure fails from some shells. |
 | Linux | Host/tooling checks only on macOS; packager tests use fake binaries. Never built or run on Linux; first mission unverified. | `.venv/bin/python tools/build.py --regenerate --jobs 8` | Native package, Vulkan window/driver validation and gameplay remain untested. |
 | Windows | Host/tooling checks only on macOS; packager tests use fake binaries. Never built or run on Windows; first mission unverified. | `.venv\Scripts\python tools\build.py --regenerate --jobs 8` | Native package, Vulkan validation, guest path separators and gameplay remain untested. |
 | Android 10+, arm64, Vulkan 1.1 | APK builds with the real translation. No device was attached; never run, first mission unverified. | `.venv/bin/python tools/build.py --target android` | Install, boot, music, touch and lifecycle behavior await a device. Existing NDK/CMake and Gradle warnings remain. |
 
 ### macOS smoke evidence
+
+`smoke/intro.script` captures the moving intro at 2, 6 and 12 seconds,
+presses Return to skip and captures the Cleopatra title four seconds later.
+All 6 steps pass. The headless host's 35-second intro audio capture contains
+34.7 seconds of non-silent audio, with a peak near full scale; the smoke host
+lacks streaming audio. The menu and campaign recordings below predate
+FFmpeg intro playback.
 
 `smoke/main-menu.script` captures the 640x480 Cleopatra title screen with
 “Click to Start”, clicks its centre, and captures the five-button main menu
@@ -73,7 +81,7 @@ Housing construction and human walkers remain unverified. The interactive
 macOS app displays the title screen, but its automated click did not advance
 it, and quitting ended with a host fault; see the Task 4.2 run record.
 
-The kit is pinned to `502ad1c` and includes Miles shims (41
+The pinned kit includes Miles shims (41
 imports), Bink and Smacker shims (19 imports), and the 15 missing user32,
 gdi32 and kernel32 shims. The
 [run record](docs/analysis.md) gives the commands, captures, button
@@ -88,9 +96,10 @@ coordinates and limits.
   the recorded baseline). The portable Python checks below do not run
   this game-backed suite.
 - GDI `TextOutA` is accepted but not drawn.
-- Cinematics are skipped by the Bink/Smacker stubs. `BINKS/` stays
-  excluded from bundles and staged game data, saving about **140 MiB**
-  on iPad and Android; see the [cinematics decision](docs/analysis.md#cinematics-decision-task-81).
+- Bink cinematics play through FFmpeg on macOS; other platforms build
+  without video until their FFmpeg is added. `BINKS/` is included in
+  bundles and staged data, adding about **140 MiB**. Smacker remains refused;
+  see the [cinematics decision](docs/analysis.md#cinematics-decision-task-81).
 - Manual Save/Load remains unverified; profile autosaves do not establish
   that saving through the menu and reloading work.
 - iOS configure fails from some shells: the compiler probe targets
@@ -268,10 +277,10 @@ Use `--device <adb serial>` when more than one device is ready. This
 command rebuilds as needed, installs the APK, stages `original/gog/app`
 minus `[bundle].exclude` into `build/android/game`, pushes it, launches
 the activity and streams logcat. An explicit `--push-game` fails when no
-device is ready. The current install contributes 1,304 files / 605.360 MiB
-plus an executable-hash `.stamp`; GOG support files, Windows libraries,
-manuals and undecoded `BINKS` cinematics are excluded. The equivalent push
-and launch commands, once staging exists and the APK is installed, are:
+device is ready. GOG support files, Windows libraries and manuals are
+excluded; `BINKS` cinematics are retained for playback on hosts with FFmpeg.
+The equivalent push and launch commands, once staging exists and the APK
+is installed, are:
 
 ```sh
 adb shell mkdir -p /sdcard/Android/data/dev.recompkit.pharaoh/files

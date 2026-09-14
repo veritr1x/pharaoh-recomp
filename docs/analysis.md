@@ -124,20 +124,20 @@ so the kit's host-drawn pointer hook has no DirectDraw surface to point at.
 
 ### Cinematics decision (Task 8.1)
 
-Keep cinematics skipped and retain `BINKS` in `[bundle].exclude` for every
-bundle or staged game-data copy, including iPad and Android. No Bink
-decoder under a permissive licence is available to this port;
-[FFmpeg's `binkvideo` decoder](https://github.com/FFmpeg/FFmpeg/blob/master/libavcodec/bink.c)
-is LGPL-2.1-or-later and would require a separate integration and licensing
-decision. Keeping the files for a future decoder would add seven unused
-videos: Task 5.1 measured **146,718,084 bytes / 139.921 MiB** (the plan's
-roughly 140 MB), reducing staged game data from **745.282 to 605.360 MiB**
-when excluded. The current Bink stub returns a finished video record and
-Smacker refuses to open one; neither decodes cinematics. Keep the complete
-original installation, including `BINKS`, as the setup input. Task 5.1
-already updated `test_bundle_exclusions_and_setup` to require the exclusion
-and reject `BINKS/High/intro_big.bik` while retaining the executable,
-model text, graphics, audio and maps; that contract remains unchanged.
+Task 8.1 kept cinematics skipped and excluded `BINKS` from bundles and
+staged game data while the decoder integration was undecided. **Task 10.2
+supersedes that decision:** the kit now decodes Bink through the dynamically
+linked FFmpeg dependency introduced in Task 10.1, and `BINKS` is retained.
+The bundle test now keeps `BINKS/High/intro_big.bik` alongside the executable,
+model text, graphics, audio and maps. The seven videos add the **146,718,084
+bytes / 139.921 MiB** measured in Task 5.1; the previous staged-data totals
+were **745.282 MiB** with them and **605.360 MiB** without them.
+
+Cinematics play through FFmpeg on macOS; other platforms build without
+video until their FFmpeg is added. Those builds still return a finished
+Bink record, and Smacker remains refused everywhere (no Smacker files ship).
+Keep the complete original installation, including `BINKS`, as the setup
+input. The smoke and headless evidence and its limits are recorded below.
 
 ## Data
 
@@ -169,6 +169,122 @@ write it.
 ### Run log
 
 Recorded runs of the pipeline against this executable, newest first.
+
+#### 2026-09-14: Task 10.2 decodes Bink into the game's DirectDraw surface
+
+Resumed from game `main` at `deb8eac` and kit `pharaoh` at `d8159bb`, with
+the decoder, conversion helper, intro script and close-cooperation change
+already in the working trees. Kept those changes and all five close checks.
+The real COM lookup is `com_this_arg`, with `ComObj::bpp` and `rmask`;
+file resolution uses `win32_host_path_op(..., WIN32_FILE_READ)`. The mixer
+sequence follows Miles: `host_audio_play`, `host_audio_stream`, then
+`host_audio_queue`. No game addresses or executable identity changed.
+
+- `kit/dx/bink.cpp` owns FFmpeg demuxers, decoders, retained frames and audio
+  queues in a host map keyed by 0x100-byte guest records. Both frame-count
+  layouts are filled; host milliseconds pace playback. The game supplies
+  the locked DirectDraw destination and pitch, and the shim validates it
+  before converting rows. Successful `BinkGetError` returns an empty string.
+  Close releases the decoder, audio channel and guest record; `dx_reset`
+  clears host state. Builds without FFmpeg keep the finished-video stub.
+- `kit/dx/video_frame.h/.cpp` converts limited-range YUV420P into RGB565,
+  RGB555 or XRGB8888 without exposing FFmpeg types. The synthetic 4x2 test
+  checks known pixel values and row padding. `test_bink_play` opens
+  `pre_dynastic_big.bik`: **560x333, 709 frames, 24 fps**, frame 1 at open,
+  two decoded frames, pitch 1280, streamed audio bytes and released resources.
+  **Frame 1 is actually black** (`0000` throughout); frame 2 is non-uniform
+  (first pixel `0020`). The non-uniform assertion therefore applies to frame
+  2, correcting the proposed expectation using the measured file content.
+- The retained failing run `build/task-10.2-close-red-tests.log` has exactly
+  **138,551 checks / 5 failures**: the close request did not end `BinkWait`
+  or finish either record layout before/after `BinkNextFrame`. The retained
+  close change exposes `host_close_requested()` from `host/boot.cpp`, with
+  a weak false default in `dx/host_api.cpp`; the video wait stops and both
+  counters finish on close. The fresh game suite below passes all five.
+
+The intro smoke was rerun once after the close change, using a new scratch
+profile under ignored `build/task-10.2-resume/`:
+
+```sh
+RECOMP_PROFILE_DIR="$intro_profile" \
+RECOMP_SCRIPT="$PWD/smoke/intro.script" \
+RECOMP_HOST_DUMP_DIR="$PWD/build/task-10.2-resume/smoke" \
+RECOMP_DDRAW_MODES=640x480x16 RECOMP_SMOKE_DRAWABLE=1024x768 \
+RECOMP_MAX_SECONDS=30 build/recomp/pop_smoke
+```
+
+`intro_profile` was created with Python `tempfile.mkdtemp` in that directory;
+stdout/stderr are in `build/task-10.2-resume/smoke.log`. **Exit 0; 6/6 steps;
+16.1 seconds reported (16.909 seconds including startup); 383 frames,
+258 changed**. The log opens `Binks\high\intro_big.bik` at **560x333,
+3,282 frames, 24/1 fps**. The script dumps at 2, 6 and 12 seconds, presses
+Return for 100 ms, waits four seconds and dumps the title. Visual inspection
+of the four 640x480 captures confirmed:
+
+| Capture under `build/task-10.2-resume/smoke/` | Content | Distinct colours |
+| --- | --- | --- |
+| `smoke_intro-2s_present.ppm` | Impressions Games logo on black | 75 |
+| `smoke_intro-6s_present.ppm` | Gold transition across the centred video rectangle | 316 |
+| `smoke_intro-12s_present.ppm` | Horses and chariot crossing the dunes | 2,070 |
+| `smoke_title-screen_present.ppm` | Cleopatra title with Click to Start | 5,507 |
+
+Each intro pair differs at **186,480 / 307,200 pixels** (the 560x333 video
+rectangle); all three are non-uniform. Python image/audio/identity assertions
+exited **0**, saved PNG copies and `build/task-10.2-resume/metrics.json`, and
+reconfirmed the pinned SHA-256, image base and entry point. The smoke host
+logs `host audio streaming unavailable`, so its two sample plays do not
+establish streamed intro audio. The existing mod-loader failure and forced
+16-bit mode warning remain in its log; there are no undeliverable calls.
+
+The earlier headless captures were retained and remeasured, not rerun during
+this resume. Both logs record a **20-second wall-clock cap**, 640x480x16,
+`RECOMP_HOST_AUDIO_CAPTURE` output and an additional 15 seconds before forced
+unwind. `build/audio-intro.wav` has **1,680,239 stereo s16 frames at 48 kHz =
+35.004979 seconds**, peak **32767 / 32768 = 0.999969**. Its headless log
+reports **34.7 seconds non-silent**. With close cooperation,
+`build/audio-intro-close.wav` has **1,680,041 frames = 35.000854 seconds**,
+peak **32734 / 32768 = 0.998962**; the log again reports 34.7 seconds
+non-silent and zero discontinuities or silent gaps over 50 ms while playing.
+
+At 20.0 seconds / frame 490, `build/task-10.2-close-headless.log` records
+WM_CLOSE, immediately followed by new front/back surfaces and a new audio
+stream: **the video ends at once and the game moves on**. Subsequent headless
+frames are black, so this run does not establish the title visually. The
+game still does not act on WM_CLOSE; the host forces an unwind at 35 seconds,
+**exit 3**. That is the pre-existing headless baseline, not a decoder failure
+or an exit-0 requirement. The close run's queue diagnostic also reports
+34.7 seconds claimed versus 16.0 seconds handed over on the reused channel;
+this task does not resolve that diagnostic. These captures establish mixer
+output, not listening quality or full-length playback of every cinematic.
+
+Fresh verification during this resume:
+
+```sh
+.venv/bin/python tools/test.py --compile-only
+.venv/bin/ctest --test-dir build/cmake/macos -R dx_tests
+.venv/bin/python kit/tools/test.py --game-dir /Users/sattam.thakur/Documents/Tests/pharaoh-recomp/kit/games/stub --compile-only
+.venv/bin/ctest --test-dir kit/build/cmake/macos -R dx_tests --output-on-failure
+.venv/bin/python -m pytest -q tests
+```
+
+Both native builds exited **0**, retaining existing compiler warnings in
+`build/task-10.2-resume/game-build.log` and `stub-build.log`. Both CTest runs
+passed **1/1, zero failures, exit 0**: the game had **138,551 checks** and
+executed the video test; the stub had **138,484 checks** and explicitly
+skipped the absent developer video. The config suite passed **4 tests,
+exit 0**, after dropping `BINKS` from `[bundle].exclude` and moving the
+intro file into its retained-files assertions. `runtime_tests` was not run.
+Other platform builds, device playback, full cinematic completion and a
+fresh app run were outside this task. All captures, logs, binaries and
+scratch profiles remain ignored and uncommitted.
+
+Publication checks: `.venv/bin/python kit/tools/format.py --write` formatted
+**243 handwritten source files**, exit **0**, without unrelated changes.
+`.venv/bin/python kit/tools/check_game_literals.py`,
+`.venv/bin/python kit/tools/check_repo.py` (after staging the kit), and both
+repositories' `git diff --check` checks exited **0**. Kit commit **`e46dc77`**
+on `pharaoh` contains the implementation and tests; this game commit re-pins
+it, retains `BINKS`, and adds the script, config coverage and documentation.
 
 #### 2026-09-14: Task 9.3 taps keep their position; edge holds still scroll
 

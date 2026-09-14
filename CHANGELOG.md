@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Re-pin the kit to `pharaoh` `e46dc77`: play Bink cinematics through FFmpeg
+  on macOS, including audio and a
+  cooperative end to the video on host close. Add the six-step intro smoke
+  script, retain `BINKS` in bundles and staged game data, and update the
+  config tests. Record moving intro captures, the title after key skip and
+  35-second headless audio captures. Other platforms keep the video stub
+  until their FFmpeg is added; headless WM_CLOSE still ends by forced unwind.
+
 - Re-pin the kit to `pharaoh` `d8159bb`: macOS builds fetch FFmpeg 7.1.1
   with Bink/Smacker decoders and bundle three dynamically linked, ad-hoc
   signed dylibs with relative install names. Add the FFmpeg/LGPL notice.

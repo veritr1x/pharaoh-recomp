@@ -1,0 +1,13 @@
+# Capture the intro at 2, 6 and 12 seconds, then skip to the title.
+# Coordinates and primary pixels use the game's 640x480x16 mode.
+wait 2000
+dump intro-2s
+wait 4000
+dump intro-6s
+wait 6000
+dump intro-12s
+key RETURN down
+wait 100
+key RETURN up
+wait 4000
+dump title-screen
