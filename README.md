@@ -16,8 +16,7 @@ The runtime, translator, hosts and mod foundation are
 submodule `kit/`. This repository holds what is Pharaoh's: `game.toml` and
 `globals.toml` (identity, addresses, curated symbols), `tests/` (the
 config's contract with the kit), `tools/analyze.py` (this game's listing
-export) and docs. The kit is private at the moment, so the submodule needs
-access to it.
+export) and docs.
 
 **You need your own copy of the game.** Game executables, artwork, sound,
 music, maps, generated game code and replacement packs are prepared locally
@@ -32,8 +31,8 @@ statically). It renders through **DirectDraw** version 1, which the kit
 models, and plays sound and MP3 music through the **Miles Sound System**
 (`mss32.dll`), which the kit handles with WAV sample and MP3 stream shims; its
 cinematics use Bink video, with unused Smacker imports. Cinematics play
-through FFmpeg on macOS. Android APKs now include FFmpeg, and its standalone
-iOS cross build passes; mobile cinematic playback remains unverified.
+through FFmpeg on macOS and on the iPad, where the intro plays from the
+installed app. Android APKs include FFmpeg but have not run on a device.
 Linux now defaults video ON; Windows enables it with MSYS2 tools and a
 MinGW-compatible compiler. Neither platform's video build or playback has
 been verified. Smacker refuses to open a video.
@@ -49,7 +48,7 @@ build does not establish first-mission play.
 | Platform | Verified status / first-mission play | Build command | Known issues and remaining checks |
 | --- | --- | --- | --- |
 | macOS 14+ | Cinematics decode through FFmpeg; intro smoke and headless audio capture pass. Earlier smoke reaches the title, menu and an advancing first mission; WAV effects work. The app shows the title and captures non-silent music. | `.venv/bin/python tools/build.py` (app); `.venv/bin/python tools/build.py --target smoke` | Shutdown SIGSEGV at `0x0056478f` remains open. Hand play is untested; the automated app click did not advance the title. Smoke music streaming is unverified. |
-| iPadOS 17+ | Earlier device build boots at **640x480x16** with a music stream active. Standalone FFmpeg arm64/iOS 17 cross build passes. | `.venv/bin/python tools/build.py --target ios --team <TEAM_ID> --no-install` | FFmpeg app build, embedded signatures and playback await the orchestrator's shell/device check. Audible output and first-mission touch play are unverified; presenter fallback remains. |
+| iPadOS 17+ | Plays by touch on an iPad Pro: the intro cinematic runs through the embedded FFmpeg dylibs, the front end and the first mission run at 800x600 with music, taps click where the finger is and the minimap moves the camera to the tapped spot (kit `4ab4604`). | `.venv/bin/python tools/build.py --target ios --team <TEAM_ID> --no-install` | Hardware keyboard and trackpad also work. Manual save/load is untested on the device. At 800x600 only the left and top screen edges scroll (see the iPad section). |
 | Linux | Host/tooling checks only on macOS; packager tests use fake binaries. Never built or run on Linux; first mission unverified. | `.venv/bin/python tools/build.py --regenerate --jobs 8` | Native package, Vulkan window/driver validation and gameplay remain untested. |
 | Windows | Host/tooling checks only on macOS; packager tests use fake binaries. Never built or run on Windows; first mission unverified. | `.venv\Scripts\python tools\build.py --regenerate --jobs 8` | Native package, Vulkan validation, guest path separators and gameplay remain untested. |
 | Android 10+, arm64, Vulkan 1.1 | Stub and real-translation APKs contain all three FFmpeg libraries; ELF dependencies pass. No device was attached; never run, first mission unverified. | `.venv/bin/python tools/build.py --target android` | Install, boot, cinematics, music, touch and lifecycle behavior await a device. Existing NDK/CMake and Gradle warnings remain. |
@@ -104,9 +103,8 @@ coordinates and limits.
   the recorded baseline). The portable Python checks below do not run
   this game-backed suite.
 - GDI `TextOutA` is accepted but not drawn.
-- Bink cinematics play through FFmpeg on macOS. Android includes FFmpeg;
-  iOS cross-builds it, with app signing and device playback still pending.
-  Linux defaults video ON; Windows requires MSYS2 bash/make and a
+- Bink cinematics play through FFmpeg on macOS and the iPad. Android
+  includes FFmpeg but has not run on a device. Linux defaults video ON; Windows requires MSYS2 bash/make and a
   MinGW-compatible compiler, otherwise video stays OFF. Native video
   builds and playback on Linux/Windows remain unverified. `BINKS/` is included in
   bundles and staged data, adding about **140 MiB**. Smacker remains refused;
@@ -114,9 +112,16 @@ coordinates and limits.
 - Manual Save/Load remains unverified; profile autosaves do not establish
   that saving through the menu and reloading work.
 - iOS configure fails from some shells: the compiler probe targets
-  `arm64-apple-macos17.0` with the macOS SDK. The orchestrator's other shell
-  built successfully, and Task 8.1's iOS stub build also passes from the
-  current shell. The earlier environment override remains unidentified.
+  `arm64-apple-macos17.0` with the macOS SDK. A plain interactive shell
+  builds successfully; the environment override behind the failing shell
+  remains unidentified.
+- The game scrolls the map while the pointer rests on a screen edge, and it
+  measures the screen once per resolution change, before it sets the new
+  mode, as Windows does. The kit reports a 1024x768 desktop between modes,
+  so at 800x600 only the left and top edges scroll; choose 1024x768 in the
+  game's own settings for all four. The stale-mode variant of this, which
+  made every tap in the right or bottom part of an 800x600 city scroll the
+  camera to the map's edge, was fixed in kit `4ab4604`.
 
 ## Build on macOS
 
@@ -396,27 +401,34 @@ in [docs/analysis.md](docs/analysis.md).
 After completing the preparation and translation steps above, use Xcode
 with the iOS SDK, a developer team and a paired iPad running iPadOS 17 or
 later. From this checkout, build without installing, then install and
-launch separately. These are the commands for the development iPad; replace
-the team and device identifiers for your own device:
+launch separately. `<TEAM_ID>` is your Apple developer team identifier and
+`<DEVICE_ID>` the iPad's identifier from the first command:
 
 ```sh
 xcrun devicectl list devices
 set -o pipefail
-.venv/bin/python tools/build.py --target ios --team BDFW2Z27HA \
-  --device 15A75531-8976-580D-AF09-5DAA939FDF32 --console --no-install \
-  2>&1 | tee build/ios-2.log | tail -30
+.venv/bin/python tools/build.py --target ios --team <TEAM_ID> \
+  --device <DEVICE_ID> --console --no-install \
+  2>&1 | tee build/ios.log | tail -30
 ```
 
 Only after the build succeeds:
 
 ```sh
 xcrun devicectl device install app \
-  --device 15A75531-8976-580D-AF09-5DAA939FDF32 \
+  --device <DEVICE_ID> \
   build/ios/Release/PharaohRecomp.app
 perl -e 'alarm 100; exec @ARGV' xcrun devicectl device process launch \
-  --device 15A75531-8976-580D-AF09-5DAA939FDF32 --terminate-existing \
-  --console dev.recompkit.pharaoh > build/ios-console-1.log 2>&1
+  --device <DEVICE_ID> --terminate-existing \
+  --console dev.recompkit.pharaoh > build/ios-console.log 2>&1
 ```
+
+There is no downloadable IPA: the app bundle carries your own game files,
+so it can only be built from a checkout with the game installed and signed
+with your own team. A development install expires after seven days on a
+free Apple account and after a year on a paid one; rebuild to renew it. If
+the device shows as `unavailable` right after it is connected or unlocked,
+wait a few seconds and retry.
 
 The alarm bounds the console capture to 100 seconds; the recorded
 `App terminated due to signal 14` is that timer, not an app fault. For hand
@@ -428,18 +440,17 @@ when its executable or stamp is missing or the stamp differs; it replaces
 that directory on a stamp change, so retain a copy of any saves before
 updating to a different executable.
 
-Task 10.3 enables FFmpeg for arm64/iOS 17 and wires its three dylibs into
+FFmpeg's three dylibs are built for arm64/iOS 17 and embedded through
 Xcode's signed Embed Frameworks phase, under `Frameworks/` with the app
-rpath `@executable_path/Frameworks`. The standalone cross build passes;
-the current shell's macOS-targeted Xcode compiler probe prevents an app
-build here. The orchestrator must check `codesign -dv` on the embedded
-dylibs and launch on the device before iOS cinematics can be called verified.
+rpath `@executable_path/Frameworks`. The intro cinematic plays on the
+device from the installed app.
 
-Taps click where the finger is, including near the top menu bar and bottom
-sidebar buttons. Holding a finger on an edge scrolls; lifting it moves the
-cursor back inside to stop scrolling. Task 9.3 verifies this in the native
-touch tests; the iPad rebuild and device check remain pending in the
-[run log](docs/analysis.md).
+Taps click where the finger is, including the top menu bar, the sidebar
+buttons and the minimap. Holding a finger on an edge scrolls; lifting it
+moves the cursor back inside to stop scrolling. A long press is a right
+click, a drag after a long press scrolls the map, two fingers pan, a
+two-finger tap is Escape and a three-finger tap opens the settings page.
+The [run log](docs/analysis.md) records the device checks.
 
 For a manual check, tap **Click to Start**, **Play Pharaoh/Cleopatra**,
 then create a new family (choose **Create** if the Family Registry appears).
@@ -452,13 +463,11 @@ holding a finger at each screen edge to scroll, and long-pressing a building
 for its right-click information panel. Check that music plays and record
 which actions work.
 
-Task 5.1's automated install and launch are recorded in the
-[run log](docs/analysis.md), including the presenter fallback fault.
-That run included no hand input: the displayed title/main menu, audible
-music and the checklist above were unverified. The first shell's compiler probe
-used `arm64-apple-macos17.0` and the macOS SDK despite the iOS target; the
-orchestrator built successfully from another shell. This is an environment
-note, not a kit bug.
+The steps through entering Nubt and playing the first mission have been
+done by hand on an iPad Pro; manual save and load on the device have not.
+`RECOMP_*` switches for a device with no shell go in the app's
+`Documents/switches.txt`, and `tools/ios_logs.py --device <DEVICE_ID>` pulls
+the app's Documents folder, including frame dumps, to `build/ios-pull`.
 
 ## Check a change
 

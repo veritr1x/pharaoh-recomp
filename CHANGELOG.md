@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- README: the iPad row and section describe what plays on the device, the
+  edge-scroll consequence of the desktop fallback, the finger gestures and
+  why there is no downloadable IPA; the build commands use `<TEAM_ID>` and
+  `<DEVICE_ID>` placeholders; the kit is no longer described as private.
+
 - Re-pin the kit to `pharaoh` `4ab4604` for Task 9.5: releasing the DirectDraw
   object that set the display mode restores the desktop, so the game's
   screen bounds, read before it sets the next mode, are no longer the
