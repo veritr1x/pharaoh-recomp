@@ -2146,6 +2146,63 @@ Expected: a `[host] pointer confinement: ... (window mode 0)` line after the fir
 
 - [ ] **Step 5: Commit** kit and re-pin.
 
+## Phase 10: cinematics through FFmpeg (LGPL, dynamically linked)
+
+The seven `BINKS/High/*.bik` files are Bink revision "f", 560x333 at 24 fps
+with Bink RDFT audio at 22050 Hz; no Smacker file ships. FFmpeg's decoders are
+the only maintained implementation; they are LGPL 2.1+, so FFmpeg is built as
+a separate, dynamically linked dependency with only the Bink and Smacker
+components, never enabling `--enable-gpl` or `--enable-nonfree`. The kit's
+NOTICE gains an FFmpeg entry with the LGPL text and a pointer to the exact
+source and configure line, and every bundle ships the shared libraries beside
+the app so a player can replace them. macOS first; the other platforms are a
+later phase.
+
+### Task 10.1: FFmpeg as a fetched, dynamically linked kit dependency (macOS)
+
+**Files:**
+- Modify: `kit/cmake/Dependencies.cmake` (an `ExternalProject_Add(ffmpeg ...)` behind option `RECOMP_VIDEO`, default ON on macOS, OFF elsewhere for now; `pop_link_video(<target>)` links the imported shared libraries `avformat`, `avcodec`, `avutil` and defines `RECOMP_HAVE_FFMPEG=1`)
+- Modify: `kit/cmake/MacBundle.cmake` and/or `kit/tools/recomp/finish_bundle.py` (copy the three dylibs into `Contents/Frameworks`, install names `@rpath/...`, the executable's rpath `@executable_path/../Frameworks`; ad-hoc sign the dylibs before the app)
+- Modify: `kit/dx/CMakeLists.txt` (`recomp_dx` links video when enabled; `dx_tests` therefore does too)
+- Modify: `kit/NOTICE`, create `kit/third_party/ffmpeg/NOTICE.md` (the LGPL 2.1 text, FFmpeg's copyright line, the version, URL, SHA-256 and the exact configure line used)
+- Modify: `kit/CHANGELOG.md`, `kit/README.md` (Dependencies section), `kit/CONTRIBUTING.md`
+
+**Interfaces:**
+- Produces: FFmpeg 7.1.1 from `https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz` (record its SHA-256 with `URL_HASH`), configured with
+  `--prefix=<binary dir>/ffmpeg --enable-shared --disable-static --disable-programs --disable-doc --disable-everything --disable-avdevice --disable-avfilter --disable-swscale --disable-swresample --disable-postproc --disable-network --enable-pic --install-name-dir=@rpath --enable-decoder=binkvideo,binkaudio_rdft,binkaudio_dct,smackvideo,smackaud --enable-demuxer=bink,smacker --enable-protocol=file`
+  (on macOS add `--cc=<CMAKE_C_COMPILER>` and, for the ios/android presets later, cross flags); imported targets `ffmpeg::avformat`, `ffmpeg::avcodec`, `ffmpeg::avutil` with include directories; `RECOMP_HAVE_FFMPEG` compile definition on consumers. A configure with `-DRECOMP_VIDEO=OFF` builds exactly as today.
+
+- [ ] **Step 1: Add the option and the external project**; the build must not need anything beyond what the kit already requires (no nasm/yasm on arm64; on x86_64 macOS pass `--disable-x86asm`). Configure and build the app: `.venv/bin/python tools/build.py --jobs 8`; the first configure downloads and builds FFmpeg (a few minutes); report the time.
+- [ ] **Step 2: Bundle the libraries**: `otool -L build/PharaohRecomp.app/Contents/MacOS/PharaohRecomp` shows `@rpath/libavcodec...`, and `ls build/PharaohRecomp.app/Contents/Frameworks` lists the three dylibs; `codesign -dv` on each succeeds; the app launches (`build/PharaohRecomp.app/Contents/MacOS/PharaohRecomp` for 10 s with `RECOMP_PROFILE_DIR=$PWD/build/profile-video`, then `pkill`).
+- [ ] **Step 3: Notices and docs**; `kit/tools/check_repo.py` passes; the stub route and `-DRECOMP_VIDEO=OFF` still configure (`cmake --preset macos-stub` in kit/).
+- [ ] **Step 4: Commit** the kit (`cmake/Dependencies.cmake cmake/MacBundle.cmake tools/recomp/finish_bundle.py dx/CMakeLists.txt NOTICE third_party/ffmpeg/NOTICE.md CHANGELOG.md README.md CONTRIBUTING.md`) "FFmpeg (Bink and Smacker only) as a dynamically linked video dependency", and re-pin in the game repo with CHANGELOG and NOTICE lines (the game's NOTICE already mentions Bink; add FFmpeg/LGPL).
+
+### Task 10.2: Bink plays through FFmpeg in `dx/bink.cpp`
+
+**How the game drives it** (`analysis/decompiled/Pharaoh.exe/functions/00413580.c`, `00413690.c`, `00413470.c`):
+`BinkOpen(name, 0)` then `BinkSetSoundSystem(BinkOpenMiles, digdriver)`; the play loop is `while (rec[+0x14] < rec[+0x10]) { BinkDoFrame(rec); BinkNextFrame(rec); copy(); do { BinkGetError(); pump messages (a key or click ends the video); BinkService(rec); } while (BinkWait(rec) != 0); }`; `copy()` locks the DirectDraw primary (`IDirectDrawSurface::Lock`, retrying on `DDERR_SURFACELOST`), calls `BinkDDSurfaceType(primary)` and then `BinkCopyToBuffer(rec, lpSurface + pitch*(y+rect.top) + (x+rect.left)*2, pitch, rec[+0x04], 0, 0, surface_type)` with `x = (640 - rec[+0x00]) / 2`, `y = (480 - rec[+0x04]) / 2`, then `Unlock`. `BinkGetError` must return a pointer to an EMPTY string when nothing is wrong (the game logs whatever non-empty text it gets).
+
+**Files:**
+- Modify: `kit/dx/bink.cpp` (real implementation under `#ifdef RECOMP_HAVE_FFMPEG`, the finished-video stub otherwise), `kit/dx/dx.h`
+- Create: `kit/dx/video_frame.h`/`.cpp` (YUV420P to RGB565/RGB555/XRGB8888 row conversion, no FFmpeg types in the header, so it is unit-testable without a decoder)
+- Test: `kit/dx/tests/dx_tests.cpp` (`test_video_frame_convert` on a synthetic 4x2 YUV420P frame with known RGB565 results; `test_bink_play` that opens `RECOMP_DEVELOPER_GAME_DIR/BINKS/High/pre_dynastic_big.bik` when that file exists, checks the record (560, 333, frame count > 0, frame 1), decodes two frames with DoFrame/NextFrame, copies into a guest buffer of pitch 1280 and checks the buffer is non-uniform and the audio channel is a stream with queued bytes; prints a note and skips when the file is absent; the test must not name the game)
+- Modify: `game.toml` `[bundle].exclude` (drop `BINKS`), `tests/test_game_config.py`, `docs/analysis.md`, `README.md`, `CHANGELOG.md`
+
+**Interfaces:**
+- Record layout the game reads: `+0x00` width, `+0x04` height, `+0x10` frame count, `+0x14` current frame (1-based; `BinkNextFrame` advances it; when it reaches the count the game's loop ends). Fill `+0x08` with the count and `+0x0c` with the current frame too (the documented Bink layout) so either reading works. The record is 0x100 bytes of guest heap; a host-side `BinkPlayer` map keyed by the record address holds the FFmpeg state.
+- `BinkOpen(name, flags)`: resolve through `win32_host_path_op(guest, WIN32_FILE_READ)`, `avformat_open_input`, find the video and audio streams, open decoders, decode nothing yet, set the record, remember `t0 = host_millis()`. 0 on any failure with the error text kept for `BinkGetError`.
+- `BinkDoFrame`: read packets until one video frame is decoded (audio packets met on the way are decoded, converted float to s16 interleaved, and appended to the audio queue); keep the frame.
+- `BinkNextFrame`: current frame += 1.
+- `BinkWait`: returns 1 while `host_millis() - t0 < (current-1) * 1000 * fps_den / fps_num`, else 0.
+- `BinkService`: audio refill (first `host_audio_play` on a channel from `dx_alloc_audio_channel()`, then `host_audio_stream` and `host_audio_queue` exactly as `mss32.cpp` streams do; keep one second ahead).
+- `BinkCopyToBuffer(rec, dest, pitch, height, x, y, flags)`: `flags & 0xff` is the surface type this shim itself handed out from `BinkDDSurfaceType`, so define its own constants (565 = 10, 555 = 9, 32-bit = 3, matching the Bink SDK numbering); convert `min(height, video height)` rows of the current frame into guest memory at `dest + y*pitch + x*bpp`, bounds-checked with `gm_valid`. Returns 0.
+- `BinkDDSurfaceType(lpDDS)`: read the surface's pixel format through the dx COM helpers (`this_surface`-style lookup by guest interface pointer, `bpp` and the red mask) and return 565, 555 or 32-bit; 0 when unknown.
+- `BinkClose`: free decoders, stop the audio channel (`host_audio_stop`, `dx_free_audio_channel`), free the record. `BinkSetSoundSystem` returns 1, `BinkOpenMiles` 0, `BinkBufferClose` 0.
+- Smacker stays refused (no files ship).
+
+- [ ] **Step 1: Write the failing tests**, **Step 2: run them** (stub route builds `dx_tests` with FFmpeg linked when `RECOMP_VIDEO` is on; the play test skips without the game file, so ALSO run `dx_tests` from this game's tree: `.venv/bin/python tools/test.py --compile-only` then `.venv/bin/ctest --test-dir build/cmake/macos -R dx_tests`, where `RECOMP_DEVELOPER_GAME_DIR` names the game), **Step 3: implement**, **Step 4: verify** with the smoke host: `smoke/main-menu.script` now meets the intro first: add a script `smoke/intro.script` that dumps at 2 s, 6 s and 12 s, then presses a key to skip, waits 4 s and dumps; expected: the three dumps are non-uniform and differ from each other (video frames), the log shows the open line with 560x333 and the frame count, and the final dump is the title screen; `RECOMP_HOST_AUDIO_CAPTURE` in the headless host holds the intro's audio. Record the run in `docs/analysis.md`.
+- [ ] **Step 5: Commit** kit and re-pin; the game commit drops `BINKS` from the bundle exclusion.
+
 ---
 
 ## Self-review notes
