@@ -320,6 +320,12 @@ does not establish that the game boots or plays.
 
 ## Play on macOS
 
+Press **fn+F10** to open the host settings page (F10 alone is a macOS system
+shortcut). **Hold Escape** to release the mouse. Window mode, frame limit
+and performance overlay are available; renderer controls appear only when
+the port has a usable symbol table. Changes are saved in the active profile
+and restored on relaunch.
+
 After completing the build steps above, launch from this checkout with
 `open build/PharaohRecomp.app`, or double-click that app in Finder. For a
 manual check, click the title screen, choose **Play Pharaoh/Cleopatra**,

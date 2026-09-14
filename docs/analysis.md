@@ -170,6 +170,98 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-14: Task 9.2 settings restore and fullscreen pass; suite gate blocks commit
+
+Resumed on game `main` `5ba92ac`, with its recorded kit pin `722d51e`
+and the submodule on `pharaoh` `362207b`. The latter is the already
+committed pre-step that gates `present_events_tests` on its real fixture.
+The supplied baseline was **42 passed suites, 3 failed suites, 5 assertion
+failures**, then a bus error after 45 completed suites. The new tests run
+first in `settings_tests.cpp`, before any symbol map is loaded.
+
+The uncommitted implementation moves
+`mods_settings_load(mods_settings_path())` immediately after
+`mods_overlay_reset()` in `mods_load_all`. The existing accessor is
+`mods_symbols_count()`: only a nonempty, validated map populates that count.
+`mods_display_row_applies(DisplayRow)` uses it for rendering, UI scale,
+wide view, classic resolution, HD textures and texture filtering; window
+mode, frame limit and performance overlay remain available. The fallback
+page filters both labels and navigation metadata through this predicate.
+README documents fn+F10 and holding Escape to release the mouse.
+
+The loader regression writes `{"host.display/window": 2}` to an isolated
+test profile, uses the existing `host_layout_set_exe_path_for_test` seam
+to make the symbol file unavailable, confirms loader failure, then checks
+the settings store and display value after `mods_display_init()`. The page
+regression checks all six hidden and three retained rows, the predicate,
+the six-row total including keypad controls, and navigation to window mode.
+Together the two suites contain **33 checks**. The existing F10 toggle
+test now expects nine rows without symbols (three host controls, three
+keypad controls and three mod settings), or its original fifteen with a
+symbol map. No game-backed failure was repaired or disabled.
+
+**Verification**, from the game checkout using its venv. Full logs remain
+under ignored `build/task-9.2-*.log`; no raw logs or profiles are tracked.
+
+| Command | Actual result |
+| --- | --- |
+| `.venv/bin/python tools/test.py --mods` before implementation (`red-build`) | Exit **1** after successfully compiling/linking the new tests. The existing fixture exits **2** because `levels/levl2001.hdr` is absent. |
+| `.venv/bin/ctest --test-dir build/cmake/macos -R mods_tests --output-on-failure` before implementation (`red-mods`) | Exit **8**. Both new suites fail: saved window remains 0, all six dependent rows remain present, row count is 12 instead of 6, and navigation still targets the old first row. At the original boundary: **42 passed / 5 failed suites / 15 assertion failures**, including ten new failures. Full run: **50 / 8 / 92**, then SIGSEGV. |
+| `.venv/bin/python kit/tools/format.py --write` (three invocations) | All exit **0**; each formats 241 handwritten files. Only task files differ. |
+| `.venv/bin/python tools/test.py --mods` after implementation and after correcting the existing F10 count (`green-build`, `final-build`) | Both exit **1** after successful test builds, followed by the same fixture exit **2**. |
+| Same CTest command, first implementation run (`green-mods`) | Exit **8**, bus error after **43 / 4 / 6**. Both new suites pass; one old F10 row-count assertion still expects 15 instead of 9. Corrected that expectation afterward. |
+| Same CTest command, final and confirmation runs (`final-mods`, `confirm-mods`) | Both exit **8**. Both new suites and the existing F10 suite pass. At the original boundary: **44 / 3 / 5**, exactly two additional passing suites. Both continue beyond that boundary and finish **52 / 6 / 82**, then SIGSEGV in the later Options tests. |
+| `RECOMP_BUILD_ROOT=/Users/sattam.thakur/Documents/Tests/pharaoh-recomp/build /Users/sattam.thakur/Documents/Tests/pharaoh-recomp/build/recomp/mods_tests`, cwd `kit/` (`direct-mods`) | Exit **139** (SIGSEGV), again **52 / 6 / 82**, with both new suites passing. This matches CTest's binary, working directory and build-root environment. |
+| `.venv/bin/python tools/build.py --jobs 8` | Exit **0**; app rebuilt and signed. One existing C-linkage return-type warning. |
+| `.venv/bin/python kit/tools/check_game_literals.py` | No findings. |
+| `.venv/bin/python -m pytest -q tests kit/tests/test_game_literals.py` | Exit **0**, **7 passed**. |
+| `git -C kit diff --check` and `git diff --check` | Both exit **0**. |
+
+Read-only Python assertions exited **0**: the executable SHA-256, image
+base and entry match the pinned identity, and generated `x86.h` matches
+`kit/runtime/x86.h`. No translator or runtime-header change needed
+regeneration. The resumed game-tree mods route was used; no stub mods
+execution, runtime or DX suite is claimed for this task.
+
+**Real-app fullscreen relaunch.** The existing
+`build/profile-f10/mod-settings.json` already contained window mode 2.
+Backed it up to `build/task-9.2-profile-f10-before.json`, then ran the
+specified `sed -i '' 's/"host.display\/window": 0/"host.display\/window": 2/'
+build/profile-f10/mod-settings.json` and confirmed the parsed value was 2.
+AppKit via `osascript -l JavaScript` reports one **1920x1080-point display,
+backing scale 2**, origin 0,0.
+
+Launched the rebuilt executable directly with
+`RECOMP_PROFILE_DIR=$PWD/build/profile-f10`. The first launch stayed
+unfocused: after 14 seconds the app was alive but the requested System
+Events query returned only `,` (osascript exit 0, measurement assertion
+exit 1). Corrected this launch omission by repeating with
+`open build/PharaohRecomp.app` after two seconds to foreground the existing
+process, then waiting another twelve seconds. PID 17433 was still alive.
+The exact query
+`osascript -e 'tell application "System Events" to tell process "PharaohRecomp" to get {position, size} of every window'`
+exited **0** and returned **`0, 0, 1920, 1080`**, matching the full display.
+The Python measurement assertion exited **0**. The initial startup log
+still prints the window's pre-settings dimensions, 1280x960 points; the
+14-second Accessibility measurement establishes the applied fullscreen size.
+
+Ran `pkill -9 -f PharaohRecomp.app/Contents/MacOS/PharaohRecomp`
+separately before and after each launch: **1, 0, 1, 0**, respectively
+(no stray process before, matching app killed afterward). Both apps were
+force-stopped as requested; this does not verify clean shutdown, gameplay,
+live fn+F10 input or Escape release. Profiles and launch artifacts remain
+under ignored `build/`.
+
+**Stopped before Step 5.** The two new suites pass and the original
+45-suite prefix retains its baseline failures, but the full run does not
+retain the required totals before its actual crash. It reaches later
+Populous-bound replay, overlay and Options failures instead. The cause of
+the changed crash point is unverified; those failures are outside this
+task's permitted repair scope. Per the instruction to stop when a stated
+verification outcome cannot be reached, no Task 9.2 commit or game re-pin
+was made, including no re-pin of pre-step `362207b`. The changes remain
+reviewable in the working trees. Nothing was pushed.
+
 #### 2026-09-14: Task 9.1 confines a captured pointer in a plain window
 
 Started with clean game `main` `cc87394` and kit `pharaoh` `502ad1c`.

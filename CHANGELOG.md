@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Restore saved host settings before symbol-table validation and hide the
+  six renderer/symbol-dependent rows from the F10 page. Document fn+F10 on
+  macOS and holding Escape to release the mouse. The fullscreen relaunch
+  check reaches 1920x1080 points; Task 9.2's kit commit and re-pin remain
+  pending because the full mods-suite totals differ from the accepted baseline.
+
 - Re-pin the kit to `pharaoh` `722d51e`: confine a captured pointer in a
   plain window too, retaining Escape release and resize-margin dragging.
   Host tests pass. The macOS app logs mode-0 confinement; a 200-point move
