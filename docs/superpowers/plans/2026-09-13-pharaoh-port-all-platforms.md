@@ -2167,6 +2167,45 @@ must keep snapping; a tap must not.
 
 - [ ] Steps: failing test, run (stub route, `-R input_touch_tests`), implement, run, format, commit the kit on `pharaoh` ("touch: a tap clicks where the finger is; only a held finger snaps to an edge"), re-pin the game repo with the docs. The iPad build is done by the orchestrator afterwards.
 
+### Task 9.4: Why a finger tap fails where a pointer click works (iPad)
+
+**Evidence (2026-09-14, iPad Pro, game at 800x600):** with a Bluetooth
+keyboard/trackpad the user's clicks work; finger taps on the city's top menu
+bar do not open the menus, and taps on the sidebar's minimap send the camera
+to the minimap's edge instead of the tapped spot. The pointer trace
+(`build/ios-console-4.log`, `-5.log`, `-6.log`, `RECOMP_TRACE_POINTER=1`)
+shows every tap delivered at the right guest coordinates (e.g. `hit 2 at
+650,147` on the minimap, `at 24,8` on the menu bar) as `button 0 down` then
+`button 0 up`, `consumed 0`. Frame dumps pulled from the device
+(`build/ios-pull/dumps*/present_*.png`) show the camera rectangle. In the
+macOS smoke host at 640x480 a scripted `click` on the minimap moves the
+camera to the clicked spot (`build/smoke-minimap/after-minimap-*.png`).
+
+**Hypotheses to test, in order:**
+1. Ordering: `TouchMapper::click` emits the placement motion and the button
+   press in the same action batch, so the guest sees the press in the same
+   frame as the move. The game's per-frame mouse routine (`FUN_004cf210`)
+   samples `GetCursorPos` once per frame and its click handlers may use the
+   position sampled BEFORE the move, i.e. the previous tap's point. A
+   hardware pointer arrives at the spot frames before the click. Check how
+   the smoke host's `click` step orders move and press across pumps
+   (`host/smoke_main.cpp` `run_step`), and whether the mapper should delay the
+   press by one presented frame after the placement (it already delays the
+   release by two).
+2. The release: the tap's release comes two presented frames after the press
+   at the same point; a game reading the button through `GetAsyncKeyState`
+   or its message flags each frame may need down and up in separate frames
+   (it gets that) or may need the up to follow a move.
+3. Mode dependence: the device runs the city at 800x600 (its settings file);
+   the smoke runs used 640x480.
+
+**Files:**
+- Modify: `kit/host/smoke_main.cpp`, `kit/host/script.cpp` (a `tap <x> <y>` verb that drives a `TouchMapper` exactly as the iOS app does: finger down, ticks with the host's presented-frame count, finger up, then the mapper's actions delivered through the same gate path as the app's, so touch semantics are reproducible on macOS)
+- Modify: `kit/host/input_touch.cpp` (the fix, once the cause is known), `kit/host/tests/input_touch_tests.cpp`
+- Modify: `docs/analysis.md` (the investigation), kit and game changelogs
+
+- [ ] Steps: add the `tap` verb (with a test that it goes through the mapper); reproduce: `smoke/first-mission.script` into the city, then `tap` on "File" (menu bar) and on the minimap's left third, dumping after each; compare with `click` at the same points; at 640x480 and, by seeding `Pharaoh.inf` byte 0x10 = 2 in the profile, at 800x600. Find the cause; fix in the mapper with a unit test; re-run the taps; commit the kit and re-pin. The orchestrator then rebuilds the iPad app.
+
 ## Phase 10: cinematics through FFmpeg (LGPL, dynamically linked)
 
 The seven `BINKS/High/*.bik` files are Bink revision "f", 560x333 at 24 fps
