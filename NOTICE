@@ -22,6 +22,17 @@ development tools with their own licenses, not original game dependencies at
 runtime. The kit's NOTICE lists the components it links (Lua, TinySoundFont,
 SDL3, volk, the Vulkan headers) and their licenses.
 
+macOS builds with RECOMP_VIDEO enabled also dynamically link FFmpeg 7.1.1,
+Copyright (c) 2000-2025 the FFmpeg developers, under the GNU Lesser General
+Public License version 2.1 or later. The kit fetches the pinned unmodified
+source with only Bink/Smacker decoders and demuxers and file input enabled.
+Its libavformat, libavcodec and libavutil dylibs are bundled as replaceable
+libraries in Contents/Frameworks. See kit/third_party/ffmpeg/NOTICE.md for
+the full LGPL 2.1 text, source URL, SHA-256, exact configure command and
+replacement instructions; the app also carries it as
+Contents/Resources/ffmpeg-NOTICE.md. FFmpeg is not covered by this project's
+MIT license. The original Bink/Smacker Windows DLLs are not distributed.
+
 The installer this port was measured from also contains third-party Windows
 components that are not part of the port and are excluded from every bundle:
 RAD Game Tools' Miles Sound System (mss32.dll, mss16.dll, the MSS*.M3D

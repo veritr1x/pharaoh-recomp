@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Re-pin the kit to `pharaoh` `d8159bb`: macOS builds fetch FFmpeg 7.1.1
+  with Bink/Smacker decoders and bundle three dynamically linked, ad-hoc
+  signed dylibs with relative install names. Add the FFmpeg/LGPL notice.
+  The app build, dependency/signature checks, 10-second launch, stub native
+  build and video-enabled/disabled stub configurations pass; `dx_tests`
+  reports 138,479 checks with no failures. Cinematics remain skipped; the
+  launch still logs the mod-loader failure and presenter fallback.
+
 - Re-pin the kit to `pharaoh` `9e31983`: taps press and release where the
   finger is near window edges, with no cursor nudge afterwards. Held fingers
   and drags keep edge snapping for scrolling. Record Task 9.3's iPad trace
