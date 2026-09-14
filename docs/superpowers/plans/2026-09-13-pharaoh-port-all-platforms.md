@@ -2224,6 +2224,25 @@ later phase.
 - [ ] **Step 1: Write the failing tests**, **Step 2: run them** (stub route builds `dx_tests` with FFmpeg linked when `RECOMP_VIDEO` is on; the play test skips without the game file, so ALSO run `dx_tests` from this game's tree: `.venv/bin/python tools/test.py --compile-only` then `.venv/bin/ctest --test-dir build/cmake/macos -R dx_tests`, where `RECOMP_DEVELOPER_GAME_DIR` names the game), **Step 3: implement**, **Step 4: verify** with the smoke host: `smoke/main-menu.script` now meets the intro first: add a script `smoke/intro.script` that dumps at 2 s, 6 s and 12 s, then presses a key to skip, waits 4 s and dumps; expected: the three dumps are non-uniform and differ from each other (video frames), the log shows the open line with 560x333 and the frame count, and the final dump is the title screen; `RECOMP_HOST_AUDIO_CAPTURE` in the headless host holds the intro's audio. Record the run in `docs/analysis.md`.
 - [ ] **Step 5: Commit** kit and re-pin; the game commit drops `BINKS` from the bundle exclusion.
 
+### Task 10.3: FFmpeg for iOS and Android
+
+**Files:**
+- Modify: `kit/cmake/Dependencies.cmake` (cross builds: the ExternalProject's configure line gains, for `IOS`: `--enable-cross-compile --target-os=darwin --arch=arm64 --cc="xcrun -sdk iphoneos clang" --sysroot=<CMAKE_OSX_SYSROOT> --extra-cflags="-arch arm64 -miphoneos-version-min=17.0" --extra-ldflags="-arch arm64 -miphoneos-version-min=17.0" --install-name-dir=@rpath`; for `ANDROID`: `--enable-cross-compile --target-os=android --arch=aarch64 --cc=<NDK toolchain>/bin/aarch64-linux-android29-clang --ar=...llvm-ar --nm=...llvm-nm --ranlib=...llvm-ranlib --strip=...llvm-strip --sysroot=<NDK sysroot> --enable-pic`; both drop the `--disable-audiotoolbox/videotoolbox/securetransport` flags where configure rejects them and keep every isolation flag that applies; the imported library names become `lib<comp>.<major>.dylib` on iOS and `lib<comp>.so` on Android (FFmpeg builds unversioned .so names for Android with `--disable-symver`; check what it installs and import that). `RECOMP_VIDEO` default ON for macOS, iOS and Android.)
+- Modify: `kit/cmake/IosBundle.cmake` (copy the three dylibs into the app's `Frameworks/` directory as a POST_BUILD step, set `XCODE_ATTRIBUTE_LD_RUNPATH_SEARCH_PATHS "@executable_path/Frameworks"`, and sign them: with automatic signing Xcode signs embedded binaries only for "Embed Frameworks" build phases, so run `codesign --force --sign "<identity from XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY / the team>" ` on each dylib in the post-build step, or use `set_target_properties(... XCODE_EMBED_FRAMEWORKS ...)` with imported targets, whichever the kit's CMake version supports; verify with `codesign -dv` and a device launch)
+- Modify: `kit/tools/build.py` (Android: stage the three `.so` files beside `libmain.so` into `jniLibs/arm64-v8a`; `--push-game` unchanged)
+- Modify: `kit/platform/android/app/build.gradle.kts.in` only if `useLegacyPackaging` or `jniLibs.keepDebugSymbols` is needed
+- Modify: `kit/third_party/ffmpeg/NOTICE.md` (the per-platform configure lines), `kit/CHANGELOG.md`, `kit/README.md`, `docs/analysis.md`, `README.md`, `CHANGELOG.md`
+
+- [ ] **Step 1: Android** (verifiable here): `.venv/bin/python tools/build.py --target android --stub` then the real `--target android`; `unzip -l` shows `lib/arm64-v8a/libavcodec.so` etc. beside `libmain.so`; `readelf -d libmain.so` (NDK `llvm-readelf`) lists the three as NEEDED. No device is attached: install stays unverified.
+- [ ] **Step 2: iOS** (the orchestrator runs the device build from a shell where the Xcode generator works; Codex verifies what it can: an isolated FFmpeg cross-configure and build for iOS from the ExternalProject, `lipo -info` on the dylibs showing arm64, `otool -L` showing @rpath and only system frameworks).
+- [ ] **Step 3: Notices, docs, commit** the kit on `pharaoh` ("FFmpeg for iOS and Android: cross builds, embedded and signed") and re-pin.
+
+### Task 10.4: FFmpeg on Linux and Windows
+
+- Modify: `kit/cmake/Dependencies.cmake` (Linux: `RECOMP_VIDEO` default ON; the same native configure with `--cc=${CMAKE_C_COMPILER}` and `--enable-pic`; imported `lib<comp>.so.<major>`; `tools/package_desktop.py` copies the shared objects beside the binary and the binary gets `RPATH $ORIGIN`. Windows: FFmpeg's configure needs a POSIX shell and make; the build looks for `bash` and `make` (MSYS2) and enables `RECOMP_VIDEO` only when both are found, otherwise stays OFF with a status message; `--toolchain=msvc`-style clang-cl builds are out of scope; document.)
+- Modify: `kit/.github/workflows/checks.yml` (the Linux job installs nothing new: FFmpeg builds from source; the Windows job keeps video off)
+- Neither can be run here; verify by configure logic tests in `kit/tools/tests` (if the decision is in Python) or by reading, and say so. Commit and re-pin.
+
 ---
 
 ## Self-review notes
