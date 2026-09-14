@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Re-pin the kit to main `4574a35`: Bink opens from a guest file handle at an
+  offset, serves the DirectSound, rectangle and pause entry points, feeds
+  audio from the frame calls and closes open movies before host teardown;
+  LoadLibraryA serves any module with registered shims. The intro smoke still
+  passes 6 of 6 steps and the stub-route dx, host and touch suites pass.
+
 - README: the iPad row and section describe what plays on the device, the
   edge-scroll consequence of the desktop fallback, the finger gestures and
   why there is no downloadable IPA; the build commands use `<TEAM_ID>` and
