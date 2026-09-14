@@ -2146,6 +2146,27 @@ Expected: a `[host] pointer confinement: ... (window mode 0)` line after the fir
 
 - [ ] **Step 5: Commit** kit and re-pin.
 
+### Task 9.3: A tap clicks where the finger is; only a held finger snaps to an edge
+
+**Why (iPad trace, 2026-09-14):** `TouchMapper::place` snaps any placed
+point within `kTouchEdgeMargin` (16 points, plus the system inset) of a
+window edge onto that edge, and `click()` places through it, so a tap near an
+edge clicks ON the edge (`test_tap_on_an_edge_clicks_there_then_moves_inside`
+asserts exactly this). This game fills the window top to bottom at 640x480 on
+the iPad (1210x834 points, scale 3.475, no pillars vertically), its city menu
+bar ("File Options Help") sits about 14 points from the top and its sidebar
+buttons reach the bottom, so those taps arrived at y=0 or y=833 in the trace
+(`[pointer] event 94.0,0.0 ... hit 2 at 32,0`): the click missed the control
+and the game edge-scrolled. The edge-hold gesture (a finger kept on an edge)
+must keep snapping; a tap must not.
+
+**Files:**
+- Modify: `kit/host/input_touch.cpp`, `kit/host/input_touch.h` (`place(out, x, y, bool snap = true)`; `click()` calls it with `snap = false`; the drag and edge-hold paths keep the default)
+- Test: `kit/host/tests/input_touch_tests.cpp` (replace `test_tap_on_an_edge_clicks_there_then_moves_inside` with `test_tap_near_an_edge_clicks_at_the_finger`: a tap at (5, 400) in 800x600 bounds yields a press and release at (5, 400) and no nudge afterwards; keep `test_edge_hold_scrolls_then_moves_the_cursor_inside` unchanged and passing)
+- Modify: `kit/CHANGELOG.md`, `docs/analysis.md` (the iPad trace and the reasoning), `CHANGELOG.md`, `README.md` (iPad section: taps click where the finger is; holding a finger on an edge scrolls)
+
+- [ ] Steps: failing test, run (stub route, `-R input_touch_tests`), implement, run, format, commit the kit on `pharaoh` ("touch: a tap clicks where the finger is; only a held finger snaps to an edge"), re-pin the game repo with the docs. The iPad build is done by the orchestrator afterwards.
+
 ## Phase 10: cinematics through FFmpeg (LGPL, dynamically linked)
 
 The seven `BINKS/High/*.bik` files are Bink revision "f", 560x333 at 24 fps
