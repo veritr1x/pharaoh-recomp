@@ -1,7 +1,12 @@
 # Campaign-entry smoke, extended one screen at a time from inspected dumps.
 # Requires a fresh RECOMP_PROFILE_DIR: an existing family opens the registry.
 # Coordinates are guest pixels at 640x480.
-wait 15000
+# Skip the intro before capturing the title screen.
+wait 4000
+key RETURN down
+wait 100
+key RETURN up
+wait 8000
 dump title-screen
 click left 320 240
 wait 4000

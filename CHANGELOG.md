@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Re-pin the kit to `pharaoh` `86bf512` for FFmpeg on Linux and Windows: Linux defaults video ON
+  and packages versioned shared objects beside the app with an `$ORIGIN`
+  rpath; Windows enables video with MSYS2 bash/make and a MinGW-compatible
+  compiler, otherwise stays OFF with a status message. Windows CI remains
+  video OFF; Linux needs no new packages. Document the prerequisites and
+  unverified native builds/playback. Both boot smoke scripts now skip the
+  intro; the main-menu rerun passes all 6 steps, capturing the title and
+  identical menu dumps in 18.1 seconds. The first-mission script was not rerun.
+
 - Re-pin the kit to `pharaoh` `c79585b`: cross-build shared FFmpeg for
   arm64/iOS 17 and Android API 29, wire Xcode embedding and signing on copy,
   and package Android's three `.so` files beside `libmain.so` with the LGPL

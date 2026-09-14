@@ -1,7 +1,12 @@
 # Capture the title screen, then click through to the main menu.
 # Coordinates are guest pixels at 640x480, the mode selected by the game.
 # Stop at the menu without clicking any of its buttons.
-wait 15000
+# Skip the intro before capturing the title screen.
+wait 4000
+key RETURN down
+wait 100
+key RETURN up
+wait 8000
 dump title-screen
 click left 320 240
 wait 4000

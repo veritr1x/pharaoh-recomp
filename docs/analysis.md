@@ -135,8 +135,11 @@ were **745.282 MiB** with them and **605.360 MiB** without them.
 
 Cinematics play through FFmpeg on macOS. Task 10.3 packages FFmpeg in both
 Android APK variants and verifies its standalone arm64/iOS 17 cross build;
-mobile playback remains unverified. Linux and Windows still build without
-video and return a finished Bink record. Smacker remains refused everywhere
+mobile playback remains unverified. Task 10.4 defaults Linux video ON and
+enables Windows video with MSYS2 bash/make and a MinGW-compatible compiler;
+their native builds and playback remain unverified. Windows CI and builds
+without the required tools/compiler stay video OFF and return a finished
+Bink record. Smacker remains refused everywhere
 (no Smacker files ship).
 Keep the complete original installation, including `BINKS`, as the setup
 input. The smoke and headless evidence and its limits are recorded below.
@@ -171,6 +174,112 @@ write it.
 ### Run log
 
 Recorded runs of the pipeline against this executable, newest first.
+
+#### 2026-09-14: Task 10.4 Linux/Windows FFmpeg configuration and intro-skipping smoke
+
+Started with clean game `main` at `97a5d4d` and kit `pharaoh` at `11c97a7`.
+This task changes desktop dependency configuration, packaging, CI and docs,
+plus the two boot smoke scripts. No runtime, translator, addresses or game
+inputs changed. Kit changes are committed on `pharaoh` as `86bf512` and
+re-pinned here; neither repository was pushed.
+
+- `kit/cmake/Dependencies.cmake` defaults Linux video ON, configures FFmpeg
+  with the native C compiler and the common `--enable-pic`, and imports
+  `libavformat.so.61`, `libavcodec.so.61`, `libavutil.so.59`.
+- On Windows, `find_program` checks for bash and make on PATH. Missing
+  tools or an MSVC-ABI compiler force video OFF with a status message.
+  With both tools and a MinGW-compatible compiler, video defaults ON;
+  explicit OFF is retained. The configure uses `--target-os=mingw32`,
+  imports versioned DLLs from `ffmpeg/bin` and `.dll.a` files from
+  `ffmpeg/lib`. `--toolchain=msvc`/clang-cl builds remain out of scope.
+  Filenames and installation directories were checked against the local
+  pinned FFmpeg 7.1.1 configure script's MinGW branch.
+- `kit/host/CMakeLists.txt` adds the Linux app's `$ORIGIN` rpath, retaining
+  CMake's automatic build-tree paths for local runs. `kit/tools/build.py`
+  passes the selected build directory to `package_desktop.stage`; staging
+  reads that cache's video flag and copies the three shared libraries
+  beside the executable with `resources/ffmpeg-NOTICE.md`. Linux SONAME
+  symlinks become regular files in the package. OFF removes only managed
+  video files, including the notice, while retaining player files; the
+  tarball includes only the current staging manifest.
+- The Linux CI package list is unchanged; existing build-essential builds
+  FFmpeg from source. Windows CI explicitly configures video OFF. The kit
+  README, CONTRIBUTING, FFmpeg notice and changelog, and the game's Linux
+  and Windows README sections document the requirements and limits.
+- `smoke/main-menu.script` and `smoke/first-mission.script` replace the
+  initial 15-second wait with `wait 4000`, Return down, `wait 100`, Return
+  up, `wait 8000`, before the first title dump. The intro's logged 3,282
+  frames at 24 fps would otherwise take **136.75 seconds**.
+
+Verification on macOS (all commands below exited **0**):
+
+```sh
+.venv/bin/python -m pytest -q kit/tools/tests/test_package_desktop.py
+.venv/bin/python tools/test.py
+.venv/bin/python tools/build.py --target smoke --jobs 8
+.venv/bin/python -m pytest -q tests
+.venv/bin/python kit/tools/format.py --write
+.venv/bin/python kit/tools/check_game_literals.py
+```
+
+The focused packaging suite reports **17 passed**, including four new
+Linux/Windows cases covering installed fake libraries, symlinks, notices,
+OFF cleanup, preserved saves and missing-library failure. Its build-driver
+cases verify that staging receives the selected CMake directory. The full
+portable suite reports **123 passed, 3 skipped**. Game config tests report
+**4 passed**. Formatting processes **243** handwritten source files with
+no unrelated changes. The smoke build completes, rebuilding FFmpeg with
+**30 compiler/linker warning diagnostics**, zero error diagnostics.
+
+From `kit/`, configured the existing stub tree OFF, then ON (restoring its
+initial ON setting):
+
+```sh
+../.venv/bin/cmake --preset macos-stub -DPython3_EXECUTABLE=/Users/sattam.thakur/Documents/Tests/pharaoh-recomp/.venv/bin/python -DRECOMP_VIDEO=OFF
+../.venv/bin/cmake --preset macos-stub -DPython3_EXECUTABLE=/Users/sattam.thakur/Documents/Tests/pharaoh-recomp/.venv/bin/python -DRECOMP_VIDEO=ON
+```
+
+Both configure/generate steps exit **0**. Read-only cache/build-graph checks
+pass **3 assertions** for OFF (cache, absent FFmpeg target and decoder
+definition) and **6 assertions** for ON (cache, target, decoder definition
+and three imported dylib names). These are macOS configurations, not
+execution of the Linux/Windows branches. Those branches and CI were
+reviewed by reading; no Python platform-decision code was introduced.
+
+The main-menu smoke used a fresh profile and registry under ignored
+`build/task-10.4-main-menu-izm6gihk`, with a 90-second subprocess timeout:
+
+```sh
+RECOMP_PROFILE_DIR="$PWD/build/task-10.4-main-menu-izm6gihk/profile" \
+RECOMP_REGISTRY="$PWD/build/task-10.4-main-menu-izm6gihk/registry.json" \
+RECOMP_SCRIPT="$PWD/smoke/main-menu.script" \
+RECOMP_HOST_DUMP_DIR="$PWD/build/task-10.4-main-menu-izm6gihk" \
+RECOMP_DDRAW_MODES=640x480x16 RECOMP_SMOKE_DRAWABLE=1024x768 \
+build/recomp/pop_smoke
+```
+
+The smoke exits **0**, guest `ExitProcess(0)`, **6/6 steps**, **18.1 seconds**,
+**393 presented frames**, no undeliverable calls. Visually inspected the
+640x480 `smoke_title-screen_present.ppm` (Cleopatra, Click to Start) and
+`smoke_main-menu_present.ppm` (five-button menu). The settled menu dump is
+byte-identical to the first menu. Title/menu have **5,507 / 9,041 distinct
+colours**; their SHA-256 values are respectively
+`3d9680ceef583a029ba1df936ed5218dc59428633396a4819ed700d506ba585b` and
+`62e1f0e5c9d1c5cd6b6cc91ee3612433b42983a3534781d04369a1f3f287839f`.
+The existing mod-loader failure, forced 16-bit-mode warning, undrawn
+TextOutA and unavailable Bink streaming audio are still logged. This smoke
+does not establish music/intro audio playback or campaign play.
+
+Additional read-only assertions confirm the pinned executable's SHA-256,
+image base and entry point (**3 passed**). Both repository diff whitespace
+checks and the staged kit's `tools/check_repo.py` pass, exit **0**. Logs,
+captures and scratch profiles remain ignored under `build/`.
+
+**Not run:** Linux/Windows native configurations or builds, their ELF/DLL
+loading and cinematic playback, remote CI, and the updated first-mission
+script. Native CTest suites were not needed for these build/packaging
+changes and were not run. The existing runtime baseline is not reassessed.
+No translation regeneration was needed: `runtime/x86.h` is unchanged.
 
 #### 2026-09-14: Task 10.3 cross-builds FFmpeg for Android and iOS
 

@@ -34,7 +34,9 @@ models, and plays sound and MP3 music through the **Miles Sound System**
 cinematics use Bink video, with unused Smacker imports. Cinematics play
 through FFmpeg on macOS. Android APKs now include FFmpeg, and its standalone
 iOS cross build passes; mobile cinematic playback remains unverified.
-Linux and Windows still build without video. Smacker refuses to open a video.
+Linux now defaults video ON; Windows enables it with MSYS2 tools and a
+MinGW-compatible compiler. Neither platform's video build or playback has
+been verified. Smacker refuses to open a video.
 The measurements are in [docs/analysis.md](docs/analysis.md).
 
 ## Platform status
@@ -58,27 +60,32 @@ build does not establish first-mission play.
 presses Return to skip and captures the Cleopatra title four seconds later.
 All 6 steps pass. The headless host's 35-second intro audio capture contains
 34.7 seconds of non-silent audio, with a peak near full scale; the smoke host
-lacks streaming audio. The menu and campaign recordings below predate
-FFmpeg intro playback.
+lacks streaming audio. The menu smoke was rerun with an intro skip in
+Task 10.4; the campaign recording below predates FFmpeg intro playback.
 
-`smoke/main-menu.script` captures the 640x480 Cleopatra title screen with
+`smoke/main-menu.script` waits four seconds, presses Return for 100 ms to
+skip the intro and waits eight seconds before capturing the 640x480
+Cleopatra title screen with
 “Click to Start”, clicks its centre, and captures the five-button main menu
 four seconds later and again after another two seconds. Both menu captures
-are identical. The 21-second smoke run presents 438 frames and exits through
-`ExitProcess(0)`. Miles WAV effects reach the smoke host's mixer; the effects
+are identical. The Task 10.4 rerun passes all 6 steps in 18.1 seconds,
+presents 393 frames and exits through `ExitProcess(0)`. Miles WAV effects
+reach the smoke host's mixer; the effects
 run records the title-screen click at peak 0.782. In the headless host, the
 title-screen MP3 capture contains 24.092 seconds of audio, 23.8 seconds
 non-silent, with no logged underrun. The smoke host lacks streaming
 callbacks, so these smoke runs do not verify music. Task 4.2 also records
 38.0 seconds of non-silent music in the interactive app's mixer capture.
 
-`smoke/first-mission.script` enters a new family name, starts the Predynastic
+`smoke/first-mission.script` uses the same intro skip, then enters a new
+family name, starts the Predynastic
 campaign, opens the Nubt briefing and dismisses the housing tutorial. Its
 two timed city captures show moving animals and an advancing date. The
 eight-round run record, every screen's capture path and the remaining
 limits are in [docs/analysis.md](docs/analysis.md). The game created profile
 autosaves; **saving through the menu and reloading remain unverified**.
-Housing construction and human walkers remain unverified. The interactive
+The updated first-mission script has not been rerun. Housing construction
+and human walkers remain unverified. The interactive
 macOS app displays the title screen, but its automated click did not advance
 it, and quitting ended with a host fault; see the Task 4.2 run record.
 
@@ -99,7 +106,9 @@ coordinates and limits.
 - GDI `TextOutA` is accepted but not drawn.
 - Bink cinematics play through FFmpeg on macOS. Android includes FFmpeg;
   iOS cross-builds it, with app signing and device playback still pending.
-  Linux and Windows build without video. `BINKS/` is included in
+  Linux defaults video ON; Windows requires MSYS2 bash/make and a
+  MinGW-compatible compiler, otherwise video stays OFF. Native video
+  builds and playback on Linux/Windows remain unverified. `BINKS/` is included in
   bundles and staged data, adding about **140 MiB**. Smacker remains refused;
   see the [cinematics decision](docs/analysis.md#cinematics-decision-task-81).
 - Manual Save/Load remains unverified; profile autosaves do not establish
@@ -164,6 +173,20 @@ been run on Linux. Task 6.3's Linux run is deferred because the development
 Mac has no Linux machine or VM with the game. CI checks portable tests and
 a stub build without game code; it does not establish gameplay.
 
+`RECOMP_VIDEO` now defaults ON. The first build downloads the pinned
+FFmpeg source and builds shared libraries with the native C compiler and
+`--enable-pic`; the packages below already supply make and the compiler,
+so no FFmpeg development package is needed. The app's rpath includes
+`$ORIGIN`; the packager places `libavformat.so.61`, `libavcodec.so.61` and
+`libavutil.so.59` beside it and includes `resources/ffmpeg-NOTICE.md` in
+the folder and tarball. Keep these libraries with the app. CMake branches
+were reviewed and fake-file packaging tests passed on macOS; Linux
+compilation, shared-library loading and cinematic playback remain unverified.
+An existing Linux CMake cache with video OFF needs `-DRECOMP_VIDEO=ON`
+once: from `kit/`, with the venv on `PATH`, run
+`cmake --preset linux -B ../build/cmake/linux -DRECOMP_VIDEO=ON`.
+Use OFF in the same command to disable video.
+
 Start in a recursive checkout with your supported game installation copied
 to `original/gog/app`. Install Python with venv support, Ghidra 12.1.3 and
 a compatible JDK as described in [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -211,6 +234,18 @@ is the game data root. The package contains no game files. Keep
 been run on Windows. Task 6.3's Windows run is deferred because no Windows
 machine with the game is available. The new `windows-2025` CI entry runs
 portable tests and a stub build; it has not been run yet.
+
+Windows CI explicitly sets `-DRECOMP_VIDEO=OFF`. For local video builds,
+CMake looks for MSYS2 `bash` and GNU `make` on `PATH`; video defaults ON
+only with both tools and a MinGW-compatible compiler. Missing tools or an
+MSVC-ABI compiler keep it OFF with a status message. `--toolchain=msvc`
+and clang-cl FFmpeg builds are out of scope, so the Visual Studio workflow
+below remains video OFF. Enabling video requires a matching MinGW clang
+toolchain for the entire kit. The enabled packaging path copies
+`avformat-61.dll`, `avcodec-61.dll`, `avutil-59.dll` beside the app and
+includes `resources/ffmpeg-NOTICE.md`. These branches were reviewed and
+staging tested with fake files on macOS; Windows video compilation, DLL
+loading and cinematic playback remain unverified.
 
 Start in a recursive checkout with the supported installation copied to
 `original\gog\app`, Python, Ghidra 12.1.3 and a compatible JDK. Run these
