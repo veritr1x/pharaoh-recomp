@@ -2169,7 +2169,7 @@ later phase.
 
 **Interfaces:**
 - Produces: FFmpeg 7.1.1 from `https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz` (record its SHA-256 with `URL_HASH`), configured with
-  `--prefix=<binary dir>/ffmpeg --enable-shared --disable-static --disable-programs --disable-doc --disable-everything --disable-avdevice --disable-avfilter --disable-swscale --disable-swresample --disable-postproc --disable-network --enable-pic --install-name-dir=@rpath --enable-decoder=binkvideo,binkaudio_rdft,binkaudio_dct,smackvideo,smackaud --enable-demuxer=bink,smacker --enable-protocol=file`
+  `--prefix=<binary dir>/ffmpeg --enable-shared --disable-static --disable-programs --disable-doc --disable-everything --disable-avdevice --disable-avfilter --disable-swscale --disable-swresample --disable-postproc --disable-network --enable-pic --install-name-dir=@rpath --enable-decoder=bink,binkaudio_rdft,binkaudio_dct,smacker,smackaud --enable-demuxer=bink,smacker --enable-protocol=file`
   (on macOS add `--cc=<CMAKE_C_COMPILER>` and, for the ios/android presets later, cross flags); imported targets `ffmpeg::avformat`, `ffmpeg::avcodec`, `ffmpeg::avutil` with include directories; `RECOMP_HAVE_FFMPEG` compile definition on consumers. A configure with `-DRECOMP_VIDEO=OFF` builds exactly as today.
 
 - [ ] **Step 1: Add the option and the external project**; the build must not need anything beyond what the kit already requires (no nasm/yasm on arm64; on x86_64 macOS pass `--disable-x86asm`). Configure and build the app: `.venv/bin/python tools/build.py --jobs 8`; the first configure downloads and builds FFmpeg (a few minutes); report the time.
