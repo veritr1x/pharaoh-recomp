@@ -175,6 +175,57 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-14: Task 9.5 finds the map scroll behind failed taps (kit `4ab4604`)
+
+**The camera drift was the game's own edge scrolling, fed stale screen
+bounds by the kit; the tap-timing change of Task 9.4 (kit `bc5b395`) did not
+change it on the device.** With `bc5b395` installed, `build/ios-console-8.log`
+shows finger taps delivered at `652,143`, `653,153`, `676,161` and `670,144`
+(the minimap, city at 800x600) while the pulled dumps
+`build/ios-png/p02160.png` to `p02880.png` show the minimap's camera
+rectangle move to and stay at the minimap's right edge. The user reported
+that the camera "still moves automatically".
+
+Cause, from the listing: `FUN_004cf660` (edge-scroll direction, called every
+frame) scrolls right when `DAT_00e38db8 - 1 <= cursor x` and down when
+`DAT_00e38db4 - 1 <= cursor y`, where the cursor is the raw `GetCursorPos`
+sample (`DAT_00e38dc4/dc0`, read in `FUN_004cf210`) and `DAT_00e38db8/db4`
+are `GetSystemMetrics(SM_CXSCREEN/SM_CYSCREEN)` cached by `FUN_00426b40`
+(and at startup by `FUN_004cf960`). `FUN_00426b40` reads them at its top,
+BEFORE `DirectDrawCreate`, `SetCooperativeLevel` and `SetDisplayMode`, and
+the game reaches it after releasing its previous DirectDraw object
+(`IDirectDraw::Release` from `0x00426f3f`). On Windows that release restores
+the desktop, so the cached bounds are the desktop's. The kit kept reporting
+the previous exclusive mode: the verbose smoke log `build/metrics/run.log`
+(main-menu script, `RECOMP_LOG=2`, GetSystemMetrics now logged) showed the
+reads at the second enable return `640`/`480` (`display mode 640x480x16`)
+right before `SetDisplayMode` of the next mode. On the device the city at
+800x600 followed a 640x480 mode, so every pointer position with x >= 639 or
+y >= 479 (the minimap spans x 612-752) counted as a screen edge and scrolled
+for as long as the pointer rested there. A trackpad user moves the pointer
+away after a click; a finger tap leaves it where it landed.
+
+Fix (kit `4ab4604`, `dx/ddraw.cpp`): a `K_DDRAW` destructor and
+`RestoreDisplayMode` both clear the current mode when that object had set
+it, so `ddraw_display_mode()` reports no mode and `GetSystemMetrics` /
+`GetDeviceCaps` fall back to the 1024x768 desktop until the next
+`SetDisplayMode`. `dx_tests` gains "release restores desktop". The re-run
+`build/metrics/run2.log` shows `ddraw: display mode restored to the desktop`
+before each re-enable and the reads returning `1024`/`768`; the main-menu
+script passes 6 of 6 steps.
+
+Consequence to note: with a 1024x768 desktop, the game at 800x600 scrolls
+only at the left and top screen edges (x < 1 or y < 1), exactly as on a
+Windows desktop larger than the game mode; at 1024x768 in-game all four edges
+scroll. The device confirmation of minimap and menu taps follows this record.
+
+| Command | Result |
+| --- | --- |
+| `.venv/bin/python kit/tools/test.py --game-dir kit/games/stub --compile-only` | exit 0 |
+| `.venv/bin/ctest --test-dir kit/build/cmake/macos -R 'dx_tests\|host_tests\|input_touch_tests'` | 3/3 passed |
+| `.venv/bin/python kit/tools/format.py --write`, `check_game_literals.py`, `check_repo.py` | exit 0 each |
+| `RECOMP_LOG=2 ... RECOMP_SCRIPT=smoke/main-menu.script build/recomp/pop_smoke` | exit 0, 6 of 6 steps, all expectations met |
+
 #### 2026-09-14: Task 9.4 delays a tap's press until after pointer placement
 
 **The supplied ordering fix passes native regressions; device confirmation

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Re-pin the kit to `pharaoh` `4ab4604` for Task 9.5: releasing the DirectDraw
+  object that set the display mode restores the desktop, so the game's
+  screen bounds, read before it sets the next mode, are no longer the
+  previous mode's. The camera drift after taps on the iPad was the game's own
+  edge scrolling with 640x480 bounds in the 800x600 city. Record the cause,
+  the verbose smoke traces and the checks in docs/analysis.md.
+
 - Re-pin the kit to `pharaoh` `bc5b395` for Task 9.4: a finger tap places the pointer, then presses
   after one presented frame (60 ms without frame counts). The existing
   90 ms / two-frame release hold starts at the press, and rapid taps remain

@@ -2206,6 +2206,27 @@ camera to the clicked spot (`build/smoke-minimap/after-minimap-*.png`).
 
 - [ ] Steps: add the `tap` verb (with a test that it goes through the mapper); reproduce: `smoke/first-mission.script` into the city, then `tap` on "File" (menu bar) and on the minimap's left third, dumping after each; compare with `click` at the same points; at 640x480 and, by seeding `Pharaoh.inf` byte 0x10 = 2 in the profile, at 800x600. Find the cause; fix in the mapper with a unit test; re-run the taps; commit the kit and re-pin. The orchestrator then rebuilds the iPad app.
 
+### Task 9.5: A released DirectDraw object restores the desktop (done, kit `4ab4604`)
+
+**Evidence (2026-09-14, iPad, kit `bc5b395` installed):** taps still sent the
+minimap camera to the right edge and the user saw the camera "still move
+automatically". The cause was not touch at all: `FUN_004cf660` scrolls the
+map while the `GetCursorPos` sample is at or past `GetSystemMetrics`'s
+screen width/height, which `FUN_00426b40` caches BEFORE it re-creates
+DirectDraw and sets the next mode. The kit kept the previous exclusive mode
+(640x480) across the game's `IDirectDraw::Release`, so in the 800x600 city
+every pointer position with x >= 639 or y >= 479 was a scrolling edge. A
+finger leaves the pointer where it tapped; a trackpad user moves it away.
+
+**Files:** `kit/dx/ddraw.cpp` (a `K_DDRAW` destructor and `RestoreDisplayMode`
+clear the mode), `kit/dx/tests/dx_tests.cpp` ("release restores desktop"),
+`kit/runtime/user32.cpp` (GetSystemMetrics logs at the verbose level),
+`docs/analysis.md`.
+
+- [x] Reproduce in the smoke host with `RECOMP_LOG=2` (`build/metrics/run.log`): the reads before the second `SetDisplayMode` return the previous mode.
+- [x] Fix, test, format, literal and repo checks; the re-run shows the desktop fallback between modes.
+- [x] Device confirmation (2026-09-14): with kit `4ab4604` installed the user reports taps now work and the camera stays put.
+
 ## Phase 10: cinematics through FFmpeg (LGPL, dynamically linked)
 
 The seven `BINKS/High/*.bik` files are Bink revision "f", 560x333 at 24 fps
