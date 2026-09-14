@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Re-pin the kit to `pharaoh` `722d51e`: confine a captured pointer in a
+  plain window too, retaining Escape release and resize-margin dragging.
+  Host tests pass. The macOS app logs mode-0 confinement; a 200-point move
+  inside changes 0.8%/1.0% of the map strip after 3/6 seconds, while resting
+  at the right edge still scrolls (99.0%/99.0%, matching the prior run).
+  Record both probes and the unchanged shutdown fault in the port analysis.
+
 - Status: document the measured macOS, iPad, Linux, Windows and Android
   states with build commands and known issues. The macOS smoke host reaches
   an advancing first mission with WAV effects; the app shows the title.

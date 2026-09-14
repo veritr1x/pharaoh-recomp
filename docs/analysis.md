@@ -170,6 +170,98 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-14: Task 9.1 confines a captured pointer in a plain window
+
+Started with clean game `main` `cc87394` and kit `pharaoh` `502ad1c`.
+Added `host_pointer_confinement_wanted(bool captured, int window_mode)` to
+the kit's input gate: it returns `captured` for every window mode. The SDL
+host uses it instead of excluding mode 0 from OS pointer confinement.
+The existing mode-0 button-drag release at the 8-window-point resize margin
+and the startup instruction remain unchanged: "Mouse capture: click inside
+to capture; hold Escape to release; drag to the window edge to resize."
+Five checks beside the confinement-rectangle tests cover captured modes
+0/1/2 and released modes 0/2.
+
+**Regression and build checks**, run from the game checkout with the local
+venv; full output remains under ignored `build/task-9.1-*.log`:
+
+| Command | Actual result |
+| --- | --- |
+| `.venv/bin/python kit/tools/test.py --game-dir "$PWD/kit/games/stub" --compile-only` before implementation | Exit **1**: five `use of undeclared identifier 'host_pointer_confinement_wanted'` errors, one per new check; five existing warnings. |
+| `.venv/bin/ctest --test-dir kit/build/cmake/macos -R host_tests --output-on-failure` after the failed build | Exit **0**, 1/1 suite passed, **3,920,226 checks / 0 failures**, using the previously built binary. This does not verify the new checks; the compile errors establish the failing test. |
+| `.venv/bin/python kit/tools/format.py --write` | Exit **0**, formatted 241 handwritten source files; only the intended files differ. |
+| `.venv/bin/python kit/tools/test.py --game-dir "$PWD/kit/games/stub" --compile-only` after implementation | Exit **0**, all native test binaries built; ten existing warnings, zero errors. |
+| `.venv/bin/ctest --test-dir kit/build/cmake/macos -R host_tests --output-on-failure` after rebuilding | Exit **0**, 1/1 suite passed in **1.23 s**, **3,913,493 checks / 0 failures**, including the five new assertions. The suite's total check count varies between runs. |
+| `.venv/bin/python tools/build.py --jobs 8` | Exit **0**, app built and signed; six existing C-linkage return-type warnings, zero errors. |
+| `.venv/bin/python kit/tools/check_game_literals.py` | Exit **0**, no findings. |
+| `.venv/bin/python -m pytest -q kit/tests/test_game_literals.py` | Exit **0**, **3 passed**. |
+| `.venv/bin/python kit/tools/check_repo.py` with the five kit files staged | Exit **0**, tracked source boundaries and local documentation links passed. |
+
+Read-only Python checks also exited **0**: the original executable's SHA-256,
+image base and entry match the identity above, and generated
+`build/recomp/gen/x86.h` is byte-identical to `kit/runtime/x86.h`.
+No translation or `x86.h` change required regeneration.
+
+**Real-app probes.** Read the orchestrator's `build/app_outside.py` and
+`build/app_click.py`. Preserved the prior captures/log and existing profile
+before the driver could replace them. Ran `.venv/bin/python build/app_outside.py`
+unchanged, then `.venv/bin/python build/app_inside.py`, a copy changing only
+the movement comment and `sx + 120 * i` to `sx + 25 * i`: eight steps now
+push 200 rather than 960 window points right. Both drivers exited **0**,
+printed `window: 320, 43, 1280, 992`, `scale 2.0 origin 320.0 73.0`, and
+`done`. Their first inside click captured the focused app, and both reached
+the Nubt city. The screenshots were visually inspected. The 200-point
+probe retains the terrain position while animals move; the 960-point
+probe moves across the map to the river.
+
+Ran `pkill -9 -f PharaohRecomp.app/Contents/MacOS/PharaohRecomp` separately
+before and after each launch: all four invocations returned **1**, with
+no matching stray process. Both app logs contain guest `ExitProcess(0)`
+followed by the known shutdown fault:
+`SIGSEGV in guest thread 1: EIP=0056478f ESP=0effff40 EBP=0effffd8`.
+Driver exit 0 is not a clean app-shutdown claim.
+
+After each probe, ran the plan's
+`grep -n "pointer confinement\|hit 2 at 6[23][0-9]" build/app-click.log | tail -5`
+and PIL difference script, both exit **0**. Fractions use the exact crop
+`(0, 1200, 1800, 1900)` and
+`sum(h[24:]) / sum(h)` after RGB difference converted to luminance, against
+that run's `app-city-before.png`. Captures are **2560x1928 pixels**.
+
+| Probe | Changed fraction at 3 s | At 6 s | Confinement line / resting hit |
+| --- | --- | --- | --- |
+| Prior saved 960-point run, before this change | **0.990** | **0.990** | No confinement line; `hit 2 at 639,299`. |
+| Rebuilt app, 960 points right | **0.990** | **0.990** | Mode-0 confinement logged; `hit 2 at 639,299`. |
+| Rebuilt app, 200 points right, inside | **0.008** | **0.010** | Mode-0 confinement logged; `hit 2 at 420,299`. |
+
+Both new logs have the capture line at line 49, immediately before the
+first button-down record. Relevant complete trace lines:
+
+```text
+[host] pointer confinement: 4.0,4.0 1272.0x952.0 points (window mode 0)
+[pointer-game] drawable 2559,1199 hit 2 at 639,299 delivered 1 guest 0,0 bounds 0,0,0,0
+[pointer-game] drawable 1683,1199 hit 2 at 420,299 delivered 1 guest 0,0 bounds 0,0,0,0
+```
+
+The second line is the 960-point probe's last hit before returning inside;
+the third is the 200-point probe's. Both return to `320,299` afterward and
+log zero-sized confinement on shutdown. Confinement still lets the pointer
+rest at the game's right edge, so that probe retains the original
+edge-scroll behavior and **does not reduce the 0.990 fraction**. The inside
+probe passes the requested **under-5%** no-scroll criterion at both times.
+
+Prior evidence, both new runs and their profiles are retained under
+`build/task-9.1-20260914-064323/{baseline,outside-960,inside-200}/`.
+The inside copy keeps the driver's original `city-outside-*` screenshot
+names; the archive directory identifies the 200-point run. These artifacts,
+drivers and saves are not committed. Live Escape release and resize dragging
+were not exercised in these probes; their existing paths and tests remain.
+No other platform or task was run.
+
+Kit commit `722d51e` contains only the input helper, its declaration and
+five checks, the SDL call/comment and kit changelog. The game re-pins it
+with this run record and a changelog entry; nothing was pushed.
+
 #### 2026-09-14: Task 8.1 cinematics decision, platform status and kit publication
 
 Keep the Task 5.1 `BINKS` exclusion and its existing regression test;
