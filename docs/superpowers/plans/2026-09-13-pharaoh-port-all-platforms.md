@@ -2054,6 +2054,98 @@ Then land `pharaoh` on kit main as in Task 3.3 and re-pin.
 git add -A && git commit -m "Status: the port plays on every supported platform; cinematics skipped"
 ```
 
+## Phase 9: findings from hand play (2026-09-14)
+
+### Task 9.1: A captured pointer is confined in windowed mode too
+
+**Why (measured with system mouse events and `RECOMP_TRACE_POINTER`):** the
+first click captures the pointer (`apply_pointer_capture(true)` in
+`host/sdl/main.cpp` `handle_button`), but `update_platform_pointer_capture`
+confines the OS pointer only when `g_window_mode != 0`. In a plain window the
+mouse can leave; `host_gate_pointer_event` then clamps the captured position
+to the drawable's last column, the guest cursor rests at x=639, and the game
+(which clamps `GetCursorPos` into its own rectangle at `0x004cf210` and has
+no notion of "outside") edge-scrolls right until the mouse comes back. The
+trace shows `hit 2 at 639,299` while the mouse rests right of the window and
+99% of the map strip changing. Borderless and fullscreen do not have this
+because the pointer is confined there. The kit's documented model already is
+"click inside to capture; hold Escape to release", so a window confines the
+same way.
+
+**Files:**
+- Modify: `kit/host/sdl/main.cpp` (`update_platform_pointer_capture`, the startup message)
+- Modify: `kit/host/input_gate.cpp`, `kit/host/input_gate.h` (a pure decision helper)
+- Test: `kit/host/tests/host_tests.cpp` (beside the `host_pointer_confinement_rect` checks, ~line 7408)
+- Modify: `kit/CHANGELOG.md`, `docs/analysis.md`, `CHANGELOG.md`
+
+**Interfaces:**
+- Produces: `bool host_pointer_confinement_wanted(bool captured, int window_mode)` in `input_gate.cpp`: true whenever `captured`, for every mode (0, 1, 2). `update_platform_pointer_capture` uses it in place of `want && g_window_mode != 0`. The resize-edge release (`host_pointer_at_resize_edge`, margin 8 window points scaled) still applies in mode 0, so dragging a button to a window edge still releases capture for a resize. The startup line "Mouse capture: click inside to capture; hold Escape to release; drag to the window edge to resize." stays true and is kept.
+
+- [ ] **Step 1: Write the failing test**
+
+```cpp
+    // A captured pointer is confined in every window mode: a plain window
+    // that let the mouse leave parked the guest cursor on the frame's edge,
+    // which an edge-scrolling game read as a hand holding it there.
+    CHECK(host_pointer_confinement_wanted(true, 0));
+    CHECK(host_pointer_confinement_wanted(true, 1));
+    CHECK(host_pointer_confinement_wanted(true, 2));
+    CHECK(!host_pointer_confinement_wanted(false, 0));
+    CHECK(!host_pointer_confinement_wanted(false, 2));
+```
+
+- [ ] **Step 2: Run to verify failure** (stub route: `.venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only`, then `.venv/bin/ctest --test-dir kit/build/cmake/macos -R host_tests --output-on-failure`): a compile error for the missing helper.
+
+- [ ] **Step 3: Implement** the helper and use it:
+
+```cpp
+    HostRect rect = host_pointer_confinement_wanted(want, g_window_mode) && g_window
+                        ? host_pointer_confinement_rect({0, 0, double(bw), double(bh)})
+                        : HostRect{};
+```
+
+Update the comment above it: a regular window confines too; the resize edges are reached through the margin release.
+
+- [ ] **Step 4: Tests, rebuild the app, verify with the driver**
+
+```bash
+.venv/bin/python kit/tools/format.py --write
+.venv/bin/python kit/tools/test.py --game-dir $PWD/kit/games/stub --compile-only >/dev/null 2>&1; .venv/bin/ctest --test-dir kit/build/cmake/macos -R host_tests --output-on-failure | tail -3
+.venv/bin/python tools/build.py --jobs 8 2>&1 | tail -2
+pkill -9 -f PharaohRecomp.app/Contents/MacOS/PharaohRecomp; .venv/bin/python build/app_outside.py
+```
+
+`build/app_outside.py` (already present; it drives the real app with `cliclick`: title, menu, name, into the city, a click on the map, then the mouse pushed 960 points to the right) prints its steps; then:
+
+```bash
+grep -n "pointer confinement\|hit 2 at 6[23][0-9]" build/app-click.log | tail -5
+.venv/bin/python - <<'EOF'
+from PIL import Image, ImageChops
+a = Image.open("build/app-city-before.png").convert("RGB"); box = (0, 1200, 1800, 1900)
+for n in ("city-outside-3s", "city-outside-6s"):
+    d = ImageChops.difference(a.crop(box), Image.open("build/app-%s.png" % n).convert("RGB").crop(box)).convert("L"); h = d.histogram()
+    print(n, "changed fraction in map strip: %.3f" % (sum(h[24:]) / sum(h)))
+EOF
+```
+
+Expected: a `[host] pointer confinement: ... (window mode 0)` line after the first click; with the mouse pushed right the trace's last hit is at the window's own right edge (x=639 is still reachable by resting the mouse against the window edge, which is the original's screen-edge scroll; that is fine) BUT the changed fraction must be judged against the previous run: record both numbers. Then a second probe: modify a copy of the driver to push the mouse only 200 points right (inside the window, away from the edge) and confirm the map strip changes under 5% (no scroll). Record the run in `docs/analysis.md`.
+
+- [ ] **Step 5: Commit** kit (`host/sdl/main.cpp host/input_gate.cpp host/input_gate.h host/tests/host_tests.cpp CHANGELOG.md`) with message "sdl: a captured pointer is confined in a plain window too", then re-pin in the game repo with a CHANGELOG line.
+
+### Task 9.2: Saved settings load before the symbol table; the page shows what applies
+
+**Why (measured):** with `"host.display/window": 2` written into the profile's `mod-settings.json`, the app still starts as a 1280x992 window. `mods_load_all` (`kit/mods/loader.cpp:544`) returns at `mods_symbols_load` for a game without a usable symbol table, before `mods_settings_load(mods_settings_path())` at line 564, so saved settings are written on every change but never read back. The overlay was deliberately moved ahead of that failure for the same reason (the comment above `mods_overlay_reset`); settings belong with it.
+
+**Files:**
+- Modify: `kit/mods/loader.cpp` (move the settings load right after `mods_overlay_reset()`)
+- Modify: `kit/mods/settings_page.cpp`, `kit/mods/display_settings.cpp`/`.h` (a `mods_display_row_applies(DisplayRow)` predicate: rows that need the game's own renderer or symbol table — rendering, ui_scale, wide_view, classic_mode, hd_textures, texture_filtering — are hidden when `mods_symbols_loaded()` (or the existing accessor for "the symbol table is usable") is false; window, frame_limit and performance_overlay stay)
+- Test: the mods test suite (`grep -rln "mods_load_all\|mods_settings_load" kit/mods/tests`), a case that writes `{"host.display/window": 2}` into a temporary profile, runs the loader against a translation with no symbol table (the stub's), and checks `mods_settings_get(MODS_OWNER_RUNTIME, "window", &v)` yields 2 after `mods_display_init()`; and a page test (or display test) that the hidden rows are absent from `mods_display_row_applies` when no symbol table is loaded
+- Modify: `kit/CHANGELOG.md`, `docs/analysis.md`, `CHANGELOG.md`, `README.md` (the F10 page note: fn+F10 on macOS since F10 is a system shortcut; hold Escape to release the mouse)
+
+- [ ] **Step 1: Write the failing tests**, **Step 2: run to verify failure**, **Step 3: implement**, **Step 4: verify** with the stub route for the mods tests and then the real app: `pkill -9 -f PharaohRecomp...; sed -i '' 's/"host.display\/window": 0/"host.display\/window": 2/' build/profile-f10/mod-settings.json` (create the profile by one prior launch if absent), launch the app with `RECOMP_PROFILE_DIR=$PWD/build/profile-f10` for 14 s and read `osascript -e 'tell application "System Events" to tell process "PharaohRecomp" to get {position, size} of every window'`: expected the display's full size (fullscreen), not 1280x992; kill the app. Record in `docs/analysis.md`.
+
+- [ ] **Step 5: Commit** kit and re-pin.
+
 ---
 
 ## Self-review notes
