@@ -449,7 +449,7 @@ Taps click where the finger is, including the top menu bar, the sidebar
 buttons and the minimap. Holding a finger on an edge scrolls; lifting it
 moves the cursor back inside to stop scrolling. A long press is a right
 click, a drag after a long press scrolls the map, two fingers pan, a
-two-finger tap is Escape and a three-finger tap opens the settings page.
+two-finger tap is a right click and a three-finger tap opens the settings page.
 The [run log](docs/analysis.md) records the device checks.
 
 For a manual check, tap **Click to Start**, **Play Pharaoh/Cleopatra**,
