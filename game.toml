@@ -86,10 +86,16 @@ rows = ["window", "performance_overlay", "keypad"]
 
 [launcher]
 # The launcher (kit host/launcher/): what it calls the game, the folder names
-# and GOG id it looks for, and the headroom an import leaves free.
+# and store ids it looks for, where to buy it, and the headroom an import
+# leaves free.
 title = "Pharaoh Gold"
 install_names = ["Pharaoh Gold", "Pharaoh + Cleopatra", "Pharaoh"]
-gog_ids = ["1207659046"]
+gog_ids = ["1207659046"]  # the goggame-1207659046.info in the supported install
+# The GOG release is the one whose executable the pin matches.
+store = "https://www.gog.com/game/pharaoh_cleopatra"
+# Steam sells the game too; its executable is not checked against the pin,
+# so a Steam install is found and then reported if it differs.
+steam_ids = ["564530"]
 min_free_mb = 600
 
 [setup]
