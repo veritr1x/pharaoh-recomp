@@ -84,6 +84,14 @@ builtin = "none"
 # Direct3D renderer and frame loop and change nothing in this 2D game.
 rows = ["window", "performance_overlay", "keypad"]
 
+[launcher]
+# The launcher (kit host/launcher/): what it calls the game, the folder names
+# and GOG id it looks for, and the headroom an import leaves free.
+title = "Pharaoh Gold"
+install_names = ["Pharaoh Gold", "Pharaoh + Cleopatra", "Pharaoh"]
+gog_ids = ["1207659046"]
+min_free_mb = 600
+
 [setup]
 # tools/setup.py: what a supported installation must contain. No annotation
 # metadata exists for this executable; tools/analyze.py runs Ghidra's own
