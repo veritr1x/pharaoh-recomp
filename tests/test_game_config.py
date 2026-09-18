@@ -39,7 +39,11 @@ class PharaohConfigTests(unittest.TestCase):
         self.assertEqual(self.cfg["game"]["heap_base"], 0x01400000)
         self.assertGreater(self.cfg["game"]["heap_base"], 0x0126D000)  # SizeOfImage end
         self.assertIn("#define RECOMP_HEAP_BASE 0x01400000u", self.header)
-        self.assertEqual(self.cfg["translate"]["entry_points"], [0x004a98b0])
+        # 0x00414cd0 is the window procedure, which Ghidra never made a
+        # function and whose address is only a MOV immediate into the
+        # WNDCLASS: without it CreateWindowExA cancels creation and the guest
+        # exits before its first frame.
+        self.assertEqual(self.cfg["translate"]["entry_points"], [0x004a98b0, 0x00414cd0])
         for address in self.cfg["translate"]["entry_points"]:
             self.assertTrue(0x00401000 <= address < 0x0056e24d, hex(address))  # inside .text
         self.assertIn('#define RECOMP_APP_NAME "PharaohRecomp"', self.header)

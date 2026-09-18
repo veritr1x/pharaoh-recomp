@@ -207,6 +207,65 @@ write it.
 
 Recorded runs of the pipeline against this executable, newest first.
 
+#### 2026-09-18: the window procedure becomes an entry point (kit `ed235eb`)
+
+**Naming `0x00414cd0` in `[translate] entry_points` is what lets the
+translated game boot.** Re-pinning from `0b4fa9a` to `ed235eb` changed two
+things in the translator, in opposite directions.
+
+It fixed translation outright. At `0b4fa9a`,
+`kit/tools/recomp/translate.py --game .` raised
+`TranslateError: SEH stub 005617c8 is not a JMP rel32 to code` and produced
+nothing; the kit's `1912fdd` ("a handler that is not a Delphi stub has no
+landings to find") removes that. At `ed235eb` the same command **translated
+6055 of 6074 functions and 10383 entry points in 47.4 s**, discovery
+converging in 8 rounds.
+
+The translated image then would not boot. The first smoke run ended
+**0 of 6 steps** with `guest exit code 0`, the log reading
+
+```
+[recomp] call to unknown target 00414cd0 (... return=0fdfff00 ...): returning 0
+[recomp] CreateWindowExA("winsjbclass"): the window procedure cancelled creation
+[recomp] ExitProcess(0)
+```
+
+`0x00414cd0` is the window procedure. Ghidra makes no function there, so the
+listing has none either, and its address appears in the image exactly once,
+as the MOV immediate at `0x004cfb33` that fills the `WNDCLASS` handed to
+`RegisterClassA` in `FUN_004cf960`. The translator's immediate scan does not
+take it, and it is absent from `gen/table.c` at `0b4fa9a`, `ac86bba` and
+`ed235eb` alike, so the callback the host makes for `CreateWindowExA` lands
+nowhere and the guest quits before its first frame. This is a game literal,
+not a kit gap to patch: `game.toml` already carries `entry_points` for
+exactly this, and it now names `0x00414cd0` beside `0x004a98b0`.
+
+| Command | Result |
+| --- | --- |
+| `kit/tools/recomp/translate.py --game .` at kit `0b4fa9a` | Exit **1**, `TranslateError: SEH stub 005617c8 is not a JMP rel32 to code`; no output |
+| The same at `ac86bba` and at `ed235eb` | Exit **0**; 6061/6080 and 6055/6074 functions. `0x00414cd0` absent from `table.c` in both |
+| The same at `ed235eb` with the new entry point | Exit **0**; **6055/6074 functions, 10383 entry points**, 47.4 s; `0x00414cd0` present |
+| `tools/build.py --regenerate --target smoke` | Exit **0** |
+| `smoke/main-menu.script`, fresh profile, 1024x768 drawable | Before: **0 of 6** steps, the window procedure cancels creation. After: exit **0**, **6 of 6 steps**, 18.2 s, 640x480 16bpp, **370 presented frames** (56 different), 6457 audio plays at peak 0.782, **all expectations met** |
+| `smoke/first-mission.script`, fresh profile | Exit **0**, **40 of 40 steps**, 92.0 s, 1825 presented frames, 104,748 audio plays, **all expectations met**; the title, menu, family name, Predynastic Begin, Nubt, the housing tutorial, the city and the File/minimap comparison all dump |
+| `tools/build.py --regenerate` (app) | Exit **0**; `build/PharaohRecomp.app` |
+| `.venv/bin/python -m pytest -q tests` | **6 passed** |
+| `tools/test.py` (portable Python suites) | **370 passed, 3 skipped** |
+| `ctest -L 'nogame\|game\|gpu\|device' -E '^(runtime_tests\|gdi_tests\|gdi_model_tests\|gdi_draw_tests\|dx_tests\|headless_tests\|host_tests\|null_host_link\|pad_tests)$'` | **17 of 17 passed**, including `controls_tests`, `layout_tests`, `keypad_tests`, `input_touch_tests` and `ui_layer_tests` |
+| `kit/tools/check_game_literals.py`, `check_repo.py`, `format.py` | Exit **0** each |
+
+The nine excluded CTest entries are a kit-side link break at this pin, not
+this game's: `runtime/interp.cpp` calls `recomp_jump`, which
+`runtime/tests/stub_recomp_call.cpp` does not define, so every test binary
+built against the stub call table fails to link with
+`Undefined symbols: "_recomp_jump"`. At `ac86bba`, where they did link, the
+full run passed 22 of 25 with `runtime_tests` hanging (the new interpreter's
+unbounded loop, a known kit bug) and `launcher_tests` and `headless_tests`
+failing only under two concurrent runs — both pass on their own.
+
+One undeliverable target remains in both smoke runs, `0x00445460` called
+from before `0x0056147f`, and neither run is affected by it.
+
 #### 2026-09-14: Task 9.5 finds the map scroll behind failed taps (kit `4ab4604`)
 
 **The camera drift was the game's own edge scrolling, fed stale screen

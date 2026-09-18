@@ -42,7 +42,14 @@ volatile_reads = []
 # Function entries the Ghidra listing lacks. 0x004a98b0 is the routine
 # holding the two-level switch at 0x004ab2af, reached only through a
 # pointer; see docs/analysis.md.
-entry_points = [0x004a98b0]
+# 0x00414cd0 is the window procedure. Ghidra makes no function there and its
+# address is only ever a MOV immediate into the WNDCLASS the game hands
+# RegisterClassA (0x004cfb33, in FUN_004cf960), so the translator's
+# immediate scan does not take it. Without the entry, CreateWindowExA calls
+# an unknown target, the procedure "cancels creation" and the guest exits
+# before the first frame. Every keystroke this game reads is dispatched
+# there; see docs/analysis.md, "The keyboard the game reads".
+entry_points = [0x004a98b0, 0x00414cd0]
 
 [hooks]
 # Every address here is a sentinel until the listings say otherwise.

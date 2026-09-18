@@ -11,6 +11,14 @@
   the regenerated app links. The new interpreter's `runtime_tests` hangs
   here; it is a known kit bug and the rest of the native suite passes with
   `-E runtime_tests`.
+- `[translate] entry_points` names the window procedure, `0x00414cd0`.
+  Ghidra makes no function there and the address is only ever a MOV
+  immediate into the `WNDCLASS` handed to `RegisterClassA`, so the
+  translator never took it: `CreateWindowExA` called an unknown target, the
+  procedure "cancelled creation" and the guest exited before its first
+  frame. With it, `smoke/main-menu.script` passes **6 of 6** steps and
+  `smoke/first-mission.script` **40 of 40**, both against the real
+  translation, which the previous pin could not produce at all.
 - `game.toml` gains `[controls]`: the pad maps onto the keys this game
   actually reads, read off the window procedure at `0x00414cd0` and recorded
   in docs/analysis.md. The sticks and the dpad press the arrow keys the
