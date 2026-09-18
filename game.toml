@@ -82,7 +82,69 @@ builtin = "none"
 # The F10 page's rows. The renderer rows (Rendering, UI scale, Wide view,
 # Resolution, Frame limit, Textures, World filtering) belong to Populous's
 # Direct3D renderer and frame loop and change nothing in this 2D game.
-rows = ["window", "performance_overlay", "keypad"]
+rows = ["window", "performance_overlay", "controls"]
+
+[controls]
+# Pharaoh is played with the mouse: the full-height panel down the right of
+# the screen holds the minimap and the build menu, and everything is built,
+# inspected and cancelled by clicking. Its keyboard does five things, all
+# read by the window procedure at 0x00414cd0 (the Ghidra listing has no
+# function there; the jump table at 0x00416684, indexed by
+# byte[0x416708 + vk - 8], is the WM_KEYDOWN dispatch, and the WM_CHAR arm
+# starts at 0x004150c2):
+#
+# - Arrow keys scroll the map: VK_LEFT/RIGHT/UP/DOWN each call
+#   FUN_00407c10(direction, step) and set one of the scroll flags
+#   0x00e92e2c-0x00e92e38 that FUN_004cf660 folds into the edge scroll.
+#   The step is 1, or 8 while Ctrl is held (0x00e92e20, set by VK_CONTROL).
+# - '[' and ']' (WM_CHAR, 0x004150cb/0x004150e9) call FUN_00416ba0, which
+#   moves the speed at 0x00e38e6c by -10 and +10, clamped to 10-100, and
+#   only on the city screen (0x00e38dda == 1).
+# - 'P' (0x00415103) toggles the pause flag 0x00e38e60 and redraws.
+# - F1-F4 recall a saved viewpoint (FUN_00416ac0, table 0x00e94ddc);
+#   Ctrl+F1-F4 store the current one there (FUN_00416b10).
+# - Return confirms: the intro skip, the family name, the briefings and
+#   every dialog (smoke/main-menu.script is a sequence of them).
+#
+# There is no rotate and no zoom in this 2D isometric game, and no overlay
+# hotkey: the overlays are panel buttons. Escape is not a menu key either -
+# it goes straight to the quit prompt (0x00416278 -> FUN_00538cd0) - and the
+# host already holds Escape to release the pointer, so it stays off the pad
+# and on the keyboard rows. F5 and F6 are the game's own SetWindowPos /
+# ShowWindow toggles; stale window bounds are what caused the 2026-09-14
+# camera drift (docs/analysis.md), so they stay off the pad too.
+#
+# "pad", not "pad+keys": the kit's pad+keys puts a keyboard half over the
+# bottom of that right-hand panel and the right stick at its middle. The
+# game asks for typed text at two moments only (the family name and save
+# names), and both the layout's KEYS tab and select (system keyboard) reach
+# a keyboard in one tap.
+default_layout = "pad"
+pad = "mapped"
+
+[controls.mapped]
+# The left stick and the dpad press the game's own arrow keys, so the map
+# scrolls without resting a finger on a screen edge - the edge hold is what
+# the camera-drift task had to tame. The right stick keeps the kit's cursor
+# mode for a physical controller; layouts/pad.tablet.json draws no right
+# stick, because a finger on the map is a better pointer than a stick.
+left_stick = "arrows"
+right_stick = "cursor"
+dpad = "arrows"
+cursor_speed = 900
+cross = "mouse_left"          # build, select, confirm
+circle = "mouse_right"        # cancel the held tool, close a panel
+square = "key:P"              # pause
+triangle = "key:F1"           # go to viewpoint 1; with r2 held, store it
+l1 = "key:LeftBracket"        # speed -10
+r1 = "key:RightBracket"       # speed +10
+l2 = "key:F2"                 # go to viewpoint 2; with r2 held, store it
+r2 = "key:LCtrl"              # hold: 8x scroll, and F1/F2 store instead
+select = "action:system_keyboard"
+start = "key:Return"
+l3 = "none"
+r3 = "key:Escape"             # the quit prompt, where a thumb cannot reach it
+ps = "action:settings"
 
 [launcher]
 # The launcher (kit host/launcher/): what it calls the game, the folder names

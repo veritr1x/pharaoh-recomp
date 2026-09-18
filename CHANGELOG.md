@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- Re-pin the kit to main `ed235eb`: JSON control layouts per form factor, an
+  on-screen PlayStation-style pad, physical controllers through SDL, phone
+  layouts with portrait, an on-device layout editor, and the NFSMW line's
+  translator and runtime work (a rewritten interpreter for heap code, SEH
+  handler classification, SSE2 and MMX forms, `tools/discover.py`). Pharaoh
+  translates unchanged — 6061 of 6080 functions, 10381 entry points — and
+  the regenerated app links. The new interpreter's `runtime_tests` hangs
+  here; it is a known kit bug and the rest of the native suite passes with
+  `-E runtime_tests`.
+- `game.toml` gains `[controls]`: the pad maps onto the keys this game
+  actually reads, read off the window procedure at `0x00414cd0` and recorded
+  in docs/analysis.md. The sticks and the dpad press the arrow keys the
+  game scrolls with, ✕ and ○ are the two mouse buttons, □ pauses (`P`),
+  L1/R1 move the game speed (`[` and `]`), △ and L2 recall the F1/F2
+  viewpoints, R2 holds Ctrl for the game's 8x scroll (and turns F1/F2 into
+  store), Start is Return and Select raises the system keyboard. F5, F6 and
+  Escape stay off the pad. The `[settings]` row is now spelled `controls`.
+- `layouts/pad.tablet.json` replaces the built-in tablet pad with one that
+  anchors every control to the left edge and the top centre, because this
+  game's minimap and build menu fill the right of the screen and the
+  built-in pad's diamond, right stick and shoulders sit on top of them.
+
 - Re-pin the kit to main `4574a35`: Bink opens from a guest file handle at an
   offset, serves the DirectSound, rectangle and pause entry points, feeds
   audio from the frame calls and closes open movies before host teardown;

@@ -345,10 +345,11 @@ delete device files or that profile; retain a backup before uninstalling
 the app or clearing its storage.
 
 For a manual check, tap **Click to Start**, **Play Pharaoh/Cleopatra**,
-create a new family, enter its name with the split keypad and press Return.
+create a new family, enter its name with the on-screen keyboard (the pad's
+**KEYS** tab, or **Select** for the system keyboard) and press Return.
 Choose **Begin Family History**, **Predynastic Period**, its **Begin**
 arrow, and **Nubt → To the city**, then dismiss the housing tutorial.
-Build houses, hold each screen edge to scroll, and long-press a building
+Build houses, scroll with the pad's left stick, and long-press a building
 for its right-click panel. Listen for music and effects, try Save/Load,
 background and resume the app, and use the game's Quit command. The host
 uses the shared touch mapper, pauses audio/presentation in the background,
@@ -457,11 +458,22 @@ then create a new family (choose **Create** if the Family Registry appears).
 Use the on-screen keypad to enter a name and press Return, choose
 **Begin Family History**, select **Predynastic Period** and its **Begin**
 arrow, then enter **Nubt** using **To the city** and dismiss the housing
-tutorial. The default keypad mode is `auto`, visible without a hardware
-keyboard; its tabs collapse or expand each half. Try building houses,
-holding a finger at each screen edge to scroll, and long-pressing a building
-for its right-click information panel. Check that music plays and record
-which actions work.
+tutorial. Try building houses, scrolling the map, and long-pressing a
+building for its right-click information panel. Check that music plays and
+record which actions work.
+
+Without a hardware keyboard the on-screen controls start on the **pad**,
+which `layouts/pad.tablet.json` keeps on the left of the screen so that the
+minimap and the build menu stay clear. Its **KEYS** tab switches to the
+split keyboard (for the family name and save names, which the pad's
+**Select** also reaches through the system keyboard), and **F10** opens the
+settings page, where the layout, its size and opacity, and **Edit
+controls** live. The pad presses the game's own keys: the sticks and the
+dpad scroll with the arrow keys, ✕ and ○ are left and right click, □ pauses,
+**L1**/**R1** move the game speed, △ and **L2** jump to the F1 and F2
+viewpoints, and **R2** held is Ctrl — the game's 8x scroll, and what turns
+△ and **L2** into "save this viewpoint". `[controls]` in `game.toml` is the
+whole table, and `docs/analysis.md` records the keys it came from.
 
 The steps through entering Nubt and playing the first mission have been
 done by hand on an iPad Pro; manual save and load on the device have not.

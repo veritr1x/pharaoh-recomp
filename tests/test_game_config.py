@@ -1,5 +1,6 @@
 """Pharaoh Gold's game.toml renders the values the kit's hooks expect."""
 import importlib.util
+import json
 from pathlib import Path
 import unittest
 
@@ -85,6 +86,63 @@ class PharaohConfigTests(unittest.TestCase):
             self.assertTrue(stage.excluded(Path(dropped), exclude), dropped)
         self.assertEqual(self.cfg["setup"]["required_dirs"], ["AUDIO", "BINKS", "Data", "Maps"])
         self.assertNotIn("annotations_url", self.cfg["setup"])
+
+    def test_controls_map_the_keys_this_game_reads(self):
+        """The pad presses what the window procedure at 0x00414cd0 dispatches.
+
+        Its WM_KEYDOWN jump table (0x00416684, indexed by
+        byte[0x416708 + vk - 8]) covers the arrows, Return, F1-F4 and Control;
+        its WM_CHAR arm (0x004150c2) covers '[', ']' and 'P'. Nothing here may
+        press a key the game ignores, and the two window keys F5/F6 - the
+        SetWindowPos and ShowWindow toggles behind the 2026-09-14 camera
+        drift - must stay off the pad."""
+        controls = self.cfg["controls"]
+        self.assertEqual(controls["default_layout"], "pad")
+        self.assertEqual(controls["pad"], "mapped")
+        mapped = controls["mapped"]
+        # Scrolling is the game's own arrow keys, never the two-finger pan
+        # that the edge-hold work had to tame.
+        self.assertEqual(mapped["left_stick"], "arrows")
+        self.assertEqual(mapped["dpad"], "arrows")
+        self.assertEqual(mapped["right_stick"], "cursor")
+        # Mouse first: the build menu, the minimap and every panel are clicks.
+        self.assertEqual(mapped["cross"], "mouse_left")
+        self.assertEqual(mapped["circle"], "mouse_right")
+        self.assertEqual(mapped["square"], "key:P")            # pause, 0x00e38e60
+        self.assertEqual(mapped["l1"], "key:LeftBracket")      # speed -10, 0x00e38e6c
+        self.assertEqual(mapped["r1"], "key:RightBracket")     # speed +10
+        self.assertEqual(mapped["triangle"], "key:F1")         # viewpoint 1, 0x00e94ddc
+        self.assertEqual(mapped["l2"], "key:F2")               # viewpoint 2
+        self.assertEqual(mapped["r2"], "key:LCtrl")            # 8x scroll, 0x00e92e20
+        self.assertEqual(mapped["start"], "key:Return")
+        self.assertEqual(mapped["select"], "action:system_keyboard")
+        self.assertEqual(mapped["ps"], "action:settings")
+        pressed = {value for key, value in mapped.items() if str(value).startswith("key:")}
+        self.assertNotIn("key:F5", pressed)
+        self.assertNotIn("key:F6", pressed)
+        self.assertNotIn("key:Escape", {mapped["cross"], mapped["circle"], mapped["square"],
+                                        mapped["triangle"], mapped["start"], mapped["select"]})
+        self.assertIn("controls", self.cfg["settings"]["rows"])
+
+    def test_the_shipped_tablet_pad_leaves_the_right_hand_panel_alone(self):
+        """layouts/pad.tablet.json overrides the built-in pad for one reason:
+        the built-in puts the diamond, the right stick and the shoulders over
+        this game's full-height right control panel. Every control must
+        therefore anchor left or top-centre, and nothing may anchor right."""
+        layout = json.loads((ROOT / "layouts" / "pad.tablet.json").read_text())
+        self.assertEqual(layout["version"], 1)
+        self.assertEqual(layout["name"], "pad")  # the name the loader overrides
+        controls = [c for group in layout["groups"] for c in group["controls"]]
+        buttons = {c["button"] for c in controls if c["kind"] == "button"}
+        self.assertEqual(buttons, {"cross", "circle", "square", "triangle", "l1", "r1",
+                                   "l2", "r2", "select", "start", "ps"})
+        self.assertEqual([c["stick"] for c in controls if c["kind"] == "stick"], ["left"])
+        for control in controls:
+            anchor = control.get("anchor", "bottom-left")
+            self.assertNotIn("right", anchor, control)
+            if anchor.endswith("left"):
+                self.assertLessEqual(control.get("x", 0) + control.get("size", control.get("w", 0)),
+                                     640, control)
 
 
 if __name__ == "__main__":

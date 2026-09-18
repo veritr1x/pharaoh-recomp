@@ -1,0 +1,58 @@
+{
+  "_comment": [
+    "Pharaoh's on-screen pad, for a tablet. It overrides the kit's built-in",
+    "tablet 'pad' for one reason: this game's only interactive chrome is the",
+    "control panel down the whole right edge of the screen - the minimap at",
+    "its top (x 612-752 of 800 in the device logs of docs/analysis.md) and the",
+    "build menu at its bottom (smoke/first-mission.script clicks 593,439 and",
+    "611,452 of 640x480). The built-in pad puts the face diamond and the right",
+    "stick in the bottom-right corner and the shoulders in the top-right one,",
+    "which is exactly that panel, and a finger on a control is claimed by the",
+    "overlay and never reaches the game.",
+    "",
+    "So every control here is anchored to the left edge or the top centre, and",
+    "no offset reaches past ~640pt; the right third of any tablet screen stays",
+    "the game's. The right stick is not drawn at all: [controls.mapped] leaves",
+    "it on 'cursor' for a physical controller, but a finger on the map is a",
+    "better pointer than a stick, and drawing it would cost the panel again.",
+    "Geometry, sizes and the tab row otherwise follow the kit's built-in pad."
+  ],
+  "version": 1,
+  "name": "pad",
+  "opacity": 0.7,
+  "groups": [
+    {
+      "id": "sticks",
+      "controls": [
+        {"kind": "stick", "stick": "left", "mode": "floating", "anchor": "bottom-left",
+         "x": 24, "y": 24, "radius": 110}
+      ]
+    },
+    {
+      "id": "buttons",
+      "controls": [
+        {"kind": "dpad", "anchor": "bottom-left", "x": 264, "y": 40, "size": 130},
+        {"kind": "button", "button": "triangle", "anchor": "bottom-left", "x": 490, "y": 164, "size": 64},
+        {"kind": "button", "button": "circle", "anchor": "bottom-left", "x": 558, "y": 96, "size": 64},
+        {"kind": "button", "button": "cross", "anchor": "bottom-left", "x": 490, "y": 28, "size": 64},
+        {"kind": "button", "button": "square", "anchor": "bottom-left", "x": 422, "y": 96, "size": 64},
+        {"kind": "button", "button": "l1", "anchor": "top-left", "x": 24, "y": 24, "w": 110, "h": 44},
+        {"kind": "button", "button": "l2", "anchor": "top-left", "x": 24, "y": 76, "w": 110, "h": 44},
+        {"kind": "button", "button": "r1", "anchor": "top-left", "x": 144, "y": 24, "w": 110, "h": 44},
+        {"kind": "button", "button": "r2", "anchor": "top-left", "x": 144, "y": 76, "w": 110, "h": 44},
+        {"kind": "button", "button": "select", "anchor": "bottom-left", "x": 24, "y": 268, "w": 90, "h": 30},
+        {"kind": "button", "button": "ps", "anchor": "bottom-left", "x": 124, "y": 263, "size": 40},
+        {"kind": "button", "button": "start", "anchor": "bottom-left", "x": 174, "y": 268, "w": 90, "h": 30}
+      ]
+    },
+    {
+      "id": "tabs",
+      "controls": [
+        {"kind": "toggle", "target": "next", "label": "KEYS", "anchor": "top-center",
+         "y": 8, "w": 72, "h": 28},
+        {"kind": "action", "action": "settings", "label": "F10", "anchor": "top-center",
+         "x": 72, "y": 8, "w": 56, "h": 28}
+      ]
+    }
+  ]
+}

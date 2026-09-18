@@ -122,6 +122,38 @@ so the kit's host-drawn pointer hook has no DirectDraw surface to point at.
   mapper would attach to the message pump, as it does for Majesty.
 - **Network**: none. The game has no multiplayer.
 
+### The keyboard the game reads
+
+Every keystroke is dispatched by the window procedure at `0x00414cd0`
+(`FUN_004cf960` stores it in the class at `0x004cfb33`). Ghidra makes no
+function there, so `analysis/decompiled/Pharaoh.exe` has no listing for it;
+the tables below were read off the image directly. The message arm is a
+jump table at `0x004163bc` indexed by `byte[0x4163d4 + message - 0x7e]`:
+`WM_KEYDOWN` → `0x004158ba`, `WM_KEYUP` → `0x004162cb`,
+`WM_CHAR` → `0x004150c2`, `WM_SYSKEYDOWN` → `0x00415071`. The `WM_KEYDOWN`
+arm is a second jump table at `0x00416684`, indexed by
+`byte[0x416708 + vk - 8]`, whose 37 live entries are the whole keyboard:
+
+| Key | What it does |
+| --- | --- |
+| Arrows (`0x25`-`0x28`) | Scroll the map: each calls `FUN_00407c10(direction, step)` — 2 right, 4 down, 6 left — and sets one of `0x00e92e2c`, `0x00e92e34`, `0x00e92e30`, `0x00e92e38`, the keyboard scroll flags `FUN_004cf660` folds into its edge-scroll decision. The step is 1, or **8** while Ctrl is held. Nothing else in the image writes those four flags. |
+| Ctrl (`0x11`), Shift (`0x10`) | Set and clear `0x00e92e20` / `0x00e92e24`; Ctrl is the fast-scroll and store-viewpoint modifier. |
+| `[`, `]` (`WM_CHAR` `0x5b`/`0x5d`) | `FUN_00416ba0` moves the speed at `0x00e38e6c` by -10 / +10, clamped to 10-100, on the city screen only (`0x00e38dda == 1`). |
+| `P` (`WM_CHAR` `0x50`/`0x70`) | Toggles `0x00e38e60` and redraws through `FUN_004e2ab0`: pause. |
+| `M` (`WM_CHAR` `0x4d`/`0x6d`) | Toggles `0x00605a5c`. |
+| F1-F4 (`0x70`-`0x73`) | `FUN_00416ac0(0..3)` recalls a saved viewpoint from the table at `0x00e94ddc`; with Ctrl, `FUN_00416b10` stores the current one there. |
+| F5, F6 (`0x74`, `0x75`) | The game's own window handling: `GetWindowRect`/`AdjustWindowRect`/`SetWindowPos`, and a fullscreen toggle of `0x00e38e5c` through `ShowWindow`. |
+| Return, Backspace, Insert, Delete, Home, End, PageUp, PageDown | Confirm, and the text caret and list paging (`FUN_004cc320`-`FUN_004cc3e0`); PageUp/PageDown also page the advisor screens through a per-screen table at `0x0041681c`. |
+| Escape (`0x1b`) | Straight to the quit prompt: `FUN_00539170`, then the dialog at `FUN_00538cd0`, and `IDYES` sets the quit flag. Not a menu key. |
+| Ctrl+`A`, Ctrl+`G`/`H`/`J`/`K`, F7-F9, F12 | Development paths, all gated on `0x00578c68` or a screen id. |
+
+There is **no rotate and no zoom** in this 2D isometric game, and no
+overlay hotkey: the overlays, the advisors and the build menu are buttons on
+the panel down the right of the screen. `FUN_004cc250`, which every
+`WM_CHAR` also reaches, is the text-entry sink (the family name, save
+names), not a hotkey table. `[controls]` in `game.toml` maps the on-screen
+pad onto exactly this set.
+
 ### Cinematics decision (Task 8.1)
 
 Task 8.1 kept cinematics skipped and excluded `BINKS` from bundles and
