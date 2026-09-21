@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fix the black screen after the opening movie by restoring the display-size
+  notification that initializes the menu presentation rectangle.
+
 - Update the shared runtime with iPad touch-coordinate, stick-motion and frame-color
   fixes, plus regression coverage for simultaneous keys and mapped pad controls.
 

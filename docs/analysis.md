@@ -3300,3 +3300,30 @@ Ignored local evidence: `build/ipad-update-config-tests.log`,
 `build/ipad-update-smoke/host.log`, `build/ipad-update-smoke/host640.log`,
 `build/ipad-update-smoke/city.png`, `build/ipad-update-ios-final-build.log`,
 `build/ipad-update-install.json`, and `build/ipad-update-device.png`.
+
+
+#### 2026-09-21: black screen after the opening movie fixed
+
+Kit `bbdc3b0` restores exclusive DirectDraw window notifications after accepted
+display-mode changes, including a return to the same resolution. Before the fix,
+the menu was drawn into the back buffer but the display rectangle at
+`0x00e39130` remained zero, leaving the front buffer black. The guest window
+procedure had not received the size notification needed to initialize it.
+No game address or original input was changed in the shared runtime.
+
+The new native regression failed before the fix; afterwards all 23 kit suites
+labelled `nogame|gpu` passed. They cover repeated mode changes, refused modes,
+windowed behavior and non-recursive layout. All six game configuration tests
+passed. The rebuilt local smoke host displayed the title, menu and Nubt mission
+briefing after skipping the movies. The 640x480 city-entry script still left the
+briefing open, so it does not establish city interaction.
+
+The signed app was updated in place on the iPad and launched. A fresh physical
+screenshot then showed a rendered city with buildings, citizens, water, menus
+and minimap. This verifies recovery from the black screen, but is not a new
+sustained-play or save/load test.
+
+Ignored evidence: `build/pharaoh-display-fixed/host.log`,
+`build/pharaoh-display-fixed/title.png`, `build/pharaoh-display-city/host.log`,
+`build/pharaoh-display-ios-build.log`, `build/pharaoh-display-install.json`,
+`build/pharaoh-display-device.log` and `build/pharaoh-display-device-menu.png`.
