@@ -3281,3 +3281,22 @@ the extraction, `tools/analyze.py` exports the listings and
 - Portable checks from this repository: the kit's suites (84 passed, 3
   skipped), `tests/test_game_config.py` (4 passed), `tools/build.py --stub`
   (configures and builds `build/stub/PharaohRecomp.app`).
+
+
+#### 2026-09-21: shared iPad runtime update
+
+The kit now pins `9e97515`, including the merged Metal Fatigue runtime and iPad
+input/presentation fixes. All six game configuration tests passed. The
+translated desktop smoke host and signed iOS app rebuilt successfully, and the
+app was updated in place on the connected iPad. A device screenshot confirmed
+opening cinematic playback with the on-screen controls.
+
+The local first-mission script completed its 40 input steps, but its captured
+`city` image still showed the main menu. A second run at the script's original
+640x480 size produced black raw captures. Those script completions are not
+mission-play evidence; city interaction was not verified in this update.
+
+Ignored local evidence: `build/ipad-update-config-tests.log`,
+`build/ipad-update-smoke/host.log`, `build/ipad-update-smoke/host640.log`,
+`build/ipad-update-smoke/city.png`, `build/ipad-update-ios-final-build.log`,
+`build/ipad-update-install.json`, and `build/ipad-update-device.png`.

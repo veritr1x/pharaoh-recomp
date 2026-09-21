@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Update the shared runtime with iPad touch-coordinate, stick-motion and frame-color
+  fixes, plus regression coverage for simultaneous keys and mapped pad controls.
+
+- Keep the tablet keyboard and KEYS tabs above the system gesture area;
+  preserve the gamepad when switching from a collapsed keyboard.
+
+- Hide the on-screen keyboard HIDE/KEYS tabs when a hardware keyboard or
+  controller auto-hides the controls; retain the layout switch and saved visibility.
+
 - Re-pin the kit to main `ed235eb`: JSON control layouts per form factor, an
   on-screen PlayStation-style pad, physical controllers through SDL, phone
   layouts with portrait, an on-device layout editor, and the NFSMW line's
