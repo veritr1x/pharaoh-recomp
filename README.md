@@ -131,7 +131,7 @@ The steps are the kit's.
 git clone --recurse-submodules https://github.com/veritr1x/pharaoh-recomp.git
 cd pharaoh-recomp
 python3 -m venv .venv
-.venv/bin/python -m pip install -r kit/requirements-dev.txt
+.venv/bin/python -m pip install --require-hashes --only-binary=:all: -r kit/requirements.lock
 innoextract --extract --output-dir original/gog /path/to/setup_pharaoh_gold_2.1.0.15.exe
 .venv/bin/python tools/setup.py --install original/gog/app --link-only
 .venv/bin/python tools/analyze.py --ghidra-home /path/to/ghidra_12.1.3_PUBLIC
@@ -206,7 +206,7 @@ sudo apt-get install -y -qq clang lld build-essential pkg-config libasound2-dev 
   libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev libudev-dev \
   libpipewire-0.3-dev libwayland-dev libdecor-0-dev liburing-dev \
   mesa-vulkan-drivers glslc
-python3 -m venv .venv && .venv/bin/python -m pip install -r kit/requirements-dev.txt
+python3 -m venv .venv && .venv/bin/python -m pip install --require-hashes --only-binary=:all: -r kit/requirements.lock
 .venv/bin/python tools/setup.py --install original/gog/app --link-only
 .venv/bin/python tools/analyze.py --ghidra-home /path/to/ghidra_12.1.3_PUBLIC
 .venv/bin/python tools/build.py --regenerate --jobs 8
