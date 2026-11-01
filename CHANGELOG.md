@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Pin the shared kit to `a18ccaf`, including the reviewed runtime, renderer
+  and translator fixes and bounded GetDIBits conversion. Use the hashed
+  contributor dependency lock in setup and CI.
+
 - Fix the black screen after the opening movie by restoring the display-size
   notification that initializes the menu presentation rectangle.
 

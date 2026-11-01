@@ -3327,3 +3327,17 @@ Ignored evidence: `build/pharaoh-display-fixed/host.log`,
 `build/pharaoh-display-fixed/title.png`, `build/pharaoh-display-city/host.log`,
 `build/pharaoh-display-ios-build.log`, `build/pharaoh-display-install.json`,
 `build/pharaoh-display-device.log` and `build/pharaoh-display-device-menu.png`.
+
+
+## Shared kit validation, 2026-11-01
+
+Pin `a18ccafa1e8c98002b2d3f7347b64fa655ebb018` is the merged recomp-kit PR #46 source.
+Its tree matches the reviewed `b1bdfd6` head: all 14 platform CI checks and
+44 game-independent Windows native suites pass. The shared portable suite
+passes 651 tests with four platform skips.
+
+Windows x64/Vulkan: the first city renders; two dragged housing lots appear and treasury changes from 2,500 to 2,480 (1,850 frames).
+
+These are bounded checks using hash-matched inputs and isolated profiles.
+Movies were disabled; full campaigns, performance and new physical-device
+validation are not established. Original inputs and player saves are preserved.
