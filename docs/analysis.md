@@ -3341,3 +3341,26 @@ Windows x64/Vulkan: the first city renders; two dragged housing lots appear and 
 These are bounded checks using hash-matched inputs and isolated profiles.
 Movies were disabled; full campaigns, performance and new physical-device
 validation are not established. Original inputs and player saves are preserved.
+
+## 2026-11-05 shared kit and browser streaming refresh
+
+On Windows/Chromium 145 with hardware WebGPU, a fresh streamed profile reached
+the Predynastic Nubt housing tutorial. Placing housing reduced the treasury
+from 2500 to 2490; immigrants arrived and the population reached five. OPFS
+contained the new family profile and replay/history autosaves. Manual named
+save/reload was not established. All 1,332 installation files were exposed
+read-only without importing the game into OPFS. No JavaScript exception,
+failed asset request or WebGPU validation error was observed. Six portable
+game tests pass. A full campaign, audible output and other browsers remain
+untested. The tested installation was a private prepared copy with the exact
+pinned original executable; an installed executable with a different hash
+was not accepted or modified.
+
+The real WebAssembly build passes on kit `1cbd81c`; see [web.md](web.md)
+for preparation, source selection and browser limitations. Earlier platform
+results above are historical and were not rerun in full.
+
+A later player-navigation check did not find the earlier quest/family files
+in the tested OPFS profile. The removal point and cause were not isolated;
+this evidence establishes in-session behavior only. Cross-launch save
+persistence needs a controlled follow-up before it can be claimed.
